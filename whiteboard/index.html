@@ -89,13 +89,16 @@
         <span id="dlg-name-state"></span>
       </div>
 
-      <div id="dlg-hash-info" style="display:none">
-        Joining meeting <code id="dlg-hash-room"></code>
+      <div class="dialog-row">
+        <label for="dlg-room-code">Meeting code:</label>
+        <input id="dlg-room-code" type="text" autocomplete="off"
+               placeholder="e.g. brave-azure-fox" />
+        <span class="hint">(leave blank to create new)</span>
       </div>
 
       <div class="dialog-actions">
         <button id="dlg-btn-create" type="button" disabled>Create new meeting</button>
-        <button id="dlg-btn-join" type="button" disabled>Join remote meeting</button>
+        <button id="dlg-btn-join" type="button" disabled>Join meeting</button>
       </div>
 
       <div id="dlg-status"></div>

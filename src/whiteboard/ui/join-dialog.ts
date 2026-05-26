@@ -14,43 +14,52 @@ export function mountJoinDialog(opts: {
 }): JoinDialogHandle {
   const dialog = document.getElementById("join-dialog") as HTMLDialogElement | null;
   const nameInput = document.getElementById("dlg-name") as HTMLInputElement | null;
+  const roomInput = document.getElementById("dlg-room-code") as HTMLInputElement | null;
   const btnEnter = document.getElementById("dlg-btn-enter") as HTMLButtonElement | null;
   const btnCreate = document.getElementById("dlg-btn-create") as HTMLButtonElement | null;
   const btnJoin = document.getElementById("dlg-btn-join") as HTMLButtonElement | null;
   const nameState = document.getElementById("dlg-name-state") as HTMLElement | null;
   const status = document.getElementById("dlg-status") as HTMLElement | null;
-  const hashInfo = document.getElementById("dlg-hash-info") as HTMLElement | null;
-  const hashRoomDisplay = document.getElementById("dlg-hash-room") as HTMLElement | null;
 
   let nameCommitted = false;
 
+  // Pre-fill name from localStorage but do NOT auto-commit — the user must
+  // explicitly press Enter / click the button to confirm before dismissing.
   const saved = safeLocalGet(NAME_KEY);
-  if (saved && nameInput) {
-    nameInput.value = saved;
-    nameCommitted = true;
-  }
+  if (saved && nameInput) nameInput.value = saved;
+
+  // Pre-fill room code from URL fragment if present.
+  const fillRoomFromHash = () => {
+    const hashRoom = opts.getHashRoomId();
+    if (hashRoom && roomInput && !roomInput.value.trim()) roomInput.value = hashRoom;
+  };
+  fillRoomFromHash();
+
+  const currentName = (): string => nameInput?.value.trim() ?? "";
+  const currentRoom = (): string => (roomInput?.value.trim() ?? "").replace(/^#/, "");
 
   const refresh = () => {
-    const name = nameInput?.value.trim() ?? "";
+    const name = currentName();
     const hasName = name.length > 0;
+    const room = currentRoom();
+    const validRoom = room.length > 0 && isValidRoomId(room);
+
     if (btnEnter) {
       btnEnter.disabled = !hasName;
       btnEnter.textContent = nameCommitted ? "Change" : "Enter";
     }
     if (btnCreate) btnCreate.disabled = !nameCommitted || !hasName;
-    if (btnJoin) btnJoin.disabled = !nameCommitted || !hasName;
-    if (nameState) {
-      nameState.textContent = nameCommitted ? "✓ saved" : (hasName ? "press Enter to confirm" : "");
-    }
-    if (nameInput) nameInput.readOnly = nameCommitted;
+    if (btnJoin) btnJoin.disabled = !nameCommitted || !hasName || !validRoom;
 
-    const hashRoom = opts.getHashRoomId();
-    if (hashInfo) hashInfo.style.display = hashRoom ? "" : "none";
-    if (hashRoomDisplay) hashRoomDisplay.textContent = hashRoom ?? "";
+    if (nameState) {
+      nameState.textContent = nameCommitted
+        ? "✓ saved"
+        : (hasName ? "press Enter to confirm" : "");
+    }
   };
 
   function commitName(): void {
-    const name = nameInput?.value.trim() ?? "";
+    const name = currentName();
     if (!name) return;
     safeLocalSet(NAME_KEY, name);
     nameCommitted = true;
@@ -67,56 +76,58 @@ export function mountJoinDialog(opts: {
       commitName();
     }
   });
-  btnEnter?.addEventListener("click", () => {
-    if (nameCommitted) {
-      nameCommitted = false;
-      refresh();
-      nameInput?.focus();
-      nameInput?.select();
-    } else {
-      commitName();
+
+  // The button always commits the current field value. Label is purely
+  // informational ("Enter" before first commit, "Change" once committed).
+  btnEnter?.addEventListener("click", commitName);
+
+  roomInput?.addEventListener("input", refresh);
+  roomInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      btnJoin?.click();
     }
   });
 
   btnCreate?.addEventListener("click", () => {
-    const name = nameInput?.value.trim() ?? "";
+    const name = currentName();
     if (!name || !nameCommitted) return;
     opts.onCreate(name);
   });
 
   btnJoin?.addEventListener("click", () => {
-    const name = nameInput?.value.trim() ?? "";
+    const name = currentName();
     if (!name || !nameCommitted) return;
-    let roomId = opts.getHashRoomId();
-    if (!roomId) {
-      const entered = window.prompt("Room ID to join (e.g. brave-azure-fox):");
-      if (!entered) return;
-      const trimmed = entered.trim().replace(/^#/, "");
-      if (!isValidRoomId(trimmed)) {
-        if (status) status.textContent = `Invalid room ID: ${trimmed}`;
-        return;
-      }
-      roomId = trimmed;
+    const room = currentRoom();
+    if (!room || !isValidRoomId(room)) {
+      if (status) status.textContent = `Invalid meeting code: ${room || "(empty)"}`;
+      return;
     }
-    opts.onJoin(name, roomId);
+    if (status) status.textContent = "";
+    opts.onJoin(name, room);
   });
 
-  window.addEventListener("hashchange", refresh);
+  window.addEventListener("hashchange", fillRoomFromHash);
   refresh();
 
   return {
     show(message?: string) {
       if (status) status.textContent = message ?? "";
+      fillRoomFromHash();
       if (dialog && !dialog.open) {
         try { dialog.showModal(); } catch { dialog.setAttribute("open", ""); }
       }
       refresh();
-      // Move focus to the action user can take next
-      if (nameCommitted) {
-        if (opts.getHashRoomId()) btnJoin?.focus();
-        else btnCreate?.focus();
-      } else {
+      // Focus: name field if empty, else the natural next step.
+      if (!currentName()) {
         nameInput?.focus();
+      } else if (!nameCommitted) {
+        nameInput?.focus();
+        nameInput?.select();
+      } else if (currentRoom() && isValidRoomId(currentRoom())) {
+        btnJoin?.focus();
+      } else {
+        btnCreate?.focus();
       }
     },
     close() {

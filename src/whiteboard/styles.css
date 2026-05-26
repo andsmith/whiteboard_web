@@ -244,12 +244,11 @@ html, body {
 .dialog-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
 #dlg-name-state { font-size: 0.8rem; color: var(--ink-faint); }
 #dlg-status { color: #c44; font-size: 0.85rem; min-height: 1.2em; margin-top: 4px; }
-#dlg-hash-info {
-  margin: 8px 0; padding: 8px 10px;
-  background: #f4f8fb; border-left: 3px solid #2a6;
-  font-size: 0.85rem; border-radius: 2px;
+#dlg-room-code {
+  font-family: ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 0.95rem;
 }
-#dlg-hash-info code { background: #eef; padding: 1px 4px; border-radius: 2px; }
+.dialog-row .hint { font-size: 0.78rem; color: var(--ink-faint); margin-left: 4px; }
 
 /* Manual debug mode */
 #manual-section {
