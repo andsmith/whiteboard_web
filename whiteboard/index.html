@@ -7,23 +7,74 @@
     <link rel="manifest" href="/manifest.json" />
     <title>whiteboard-web</title>
     <style>
-      body { font-family: sans-serif; margin: 1rem; }
+      body { font-family: sans-serif; margin: 1rem; max-width: 900px; }
       #board { border: 1px solid #888; display: block; touch-action: none; }
-      .signaling { margin-top: 1rem; display: grid; gap: 0.5rem; max-width: 720px; }
-      .signaling textarea { width: 100%; height: 6rem; font-family: monospace; font-size: 0.8rem; }
-      .row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+      .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
       nav a { font-size: 0.9rem; }
+
+      .room { margin-top: 1rem; display: grid; gap: 0.5rem; padding: 0.75rem;
+              border: 1px solid #ccc; border-radius: 6px; background: #fafafa; }
+      .room input[type=text] { padding: 0.25rem 0.4rem; font-size: 1rem; }
+      .room button { padding: 0.3rem 0.7rem; font-size: 0.95rem; }
+      .room button:disabled { color: #999; cursor: not-allowed; }
+      .room code { background: #eee; padding: 0.1rem 0.3rem; border-radius: 3px; }
+      #participants { list-style: none; padding: 0; margin: 0.25rem 0; }
+      #participants li { padding: 0.2rem 0; display: flex; gap: 0.5rem; align-items: center; }
+      .tag { font-size: 0.75rem; padding: 0.05rem 0.4rem; border-radius: 3px;
+             background: #444; color: white; }
+      .tag.you { background: #2a6; }
+
+      .signaling { margin-top: 1rem; display: grid; gap: 0.5rem;
+                   padding: 0.75rem; border: 1px solid #ddd; border-radius: 6px;
+                   background: #fcfcfc; }
+      .signaling h2 { color: #888; font-size: 1rem; }
+      .signaling textarea { width: 100%; height: 6rem; font-family: monospace; font-size: 0.8rem; }
     </style>
   </head>
   <body>
     <nav><a href="../">&larr; home</a></nav>
     <h1>whiteboard-web</h1>
-    <p><em>Stub. P2P collaborative whiteboard over WebRTC (manual SDP for now).</em></p>
 
     <canvas id="board" width="800" height="500"></canvas>
 
+    <section class="room">
+      <h2>Meeting</h2>
+
+      <div id="lobby">
+        <div class="row">
+          <label>Your name:
+            <input id="name-input" type="text" maxlength="40" autocomplete="name"
+                   placeholder="required" />
+          </label>
+        </div>
+        <div class="row">
+          <button id="btn-create" disabled>Create new meeting</button>
+          <span id="join-prompt" hidden>
+            or join meeting <code id="join-room-id"></code>
+            <button id="btn-join" disabled>Join</button>
+          </span>
+        </div>
+        <div id="lobby-status"></div>
+      </div>
+
+      <div id="in-room" hidden>
+        <p>
+          Room: <code id="room-id-display"></code>
+          <button id="btn-copy-url">Copy share link</button>
+          <button id="btn-leave">Leave meeting</button>
+        </p>
+        <p id="room-status"></p>
+        <h3 style="margin:0.2rem 0">Participants:</h3>
+        <ul id="participants"></ul>
+      </div>
+    </section>
+
     <section class="signaling">
-      <h2>Signaling (manual SDP copy/paste)</h2>
+      <h2>Manual signaling (debug)</h2>
+      <p style="font-size: 0.85rem; color: #666; margin: 0">
+        Direct SDP copy/paste between two peers — works without the signaling server.
+        Will move behind <code>?mode=manual</code> later.
+      </p>
       <div class="row">
         <button id="btn-create-offer">Create offer</button>
         <button id="btn-accept-offer">Accept pasted offer &rarr; create answer</button>
