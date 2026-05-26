@@ -7,6 +7,11 @@ window.addEventListener("DOMContentLoaded", async () => {
   const canvas = document.getElementById("board") as HTMLCanvasElement | null;
   if (canvas) initBoard(canvas);
 
+  const local = document.getElementById("local-sdp") as HTMLTextAreaElement | null;
+  if (local) local.value = "";
+  const remote = document.getElementById("remote-sdp") as HTMLTextAreaElement | null;
+  if (remote) remote.value = "";
+
   setStatus("loading TURN credentials...");
   const iceServers = await loadIceServers();
   const peer = createPeer({ iceServers });
