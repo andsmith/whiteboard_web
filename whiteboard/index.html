@@ -34,6 +34,7 @@
   <body>
     <nav><a href="../">&larr; home</a></nav>
     <h1>whiteboard-web</h1>
+    <p class="version" style="color:#888;font-size:0.85rem;margin-top:-0.5rem">v0.01</p>
 
     <canvas id="board" width="800" height="500"></canvas>
 
@@ -46,12 +47,14 @@
             <input id="name-input" type="text" maxlength="40" autocomplete="name"
                    placeholder="required" />
           </label>
+          <button id="btn-enter-name" disabled>Enter</button>
+          <span id="name-state" style="font-size:0.85rem;color:#888"></span>
         </div>
         <div class="row">
           <button id="btn-create" disabled>Create new meeting</button>
-          <span id="join-prompt" hidden>
-            or join meeting <code id="join-room-id"></code>
-            <button id="btn-join" disabled>Join</button>
+          <button id="btn-join" disabled>Join remote meeting</button>
+          <span id="join-prompt" hidden style="font-size:0.85rem">
+            (joining <code id="join-room-id"></code>)
           </span>
         </div>
         <div id="lobby-status"></div>

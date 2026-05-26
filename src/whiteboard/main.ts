@@ -31,27 +31,54 @@ window.addEventListener("DOMContentLoaded", () => {
  * Lobby (pre-room) UI
  * ============================================================ */
 
+let nameCommitted = false;
+
 function setupLobby(): void {
   const nameInput = el<HTMLInputElement>("name-input");
+  const btnEnter = el<HTMLButtonElement>("btn-enter-name");
   const btnCreate = el<HTMLButtonElement>("btn-create");
   const btnJoin = el<HTMLButtonElement>("btn-join");
+  const nameState = el<HTMLSpanElement>("name-state");
 
   const saved = safeLocalGet(NAME_KEY);
-  if (saved && nameInput) nameInput.value = saved;
+  if (saved && nameInput) {
+    nameInput.value = saved;
+    nameCommitted = true;
+  }
 
-  const refreshDisabled = () => {
+  const refresh = () => {
     const name = nameInput?.value.trim() ?? "";
     const hasName = name.length > 0;
-    if (btnCreate) btnCreate.disabled = !hasName;
-    if (btnJoin) btnJoin.disabled = !hasName;
-    if (hasName) safeLocalSet(NAME_KEY, name);
+    if (btnEnter) btnEnter.disabled = !hasName || nameCommitted;
+    if (btnCreate) btnCreate.disabled = !nameCommitted || !hasName;
+    if (btnJoin) btnJoin.disabled = !nameCommitted || !hasName;
+    if (nameState) nameState.textContent = nameCommitted ? "✓ saved" : (hasName ? "press Enter to confirm" : "");
   };
-  nameInput?.addEventListener("input", refreshDisabled);
-  refreshDisabled();
+  refresh();
+
+  nameInput?.addEventListener("input", () => {
+    nameCommitted = false;
+    refresh();
+  });
+  nameInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commitName();
+    }
+  });
+  btnEnter?.addEventListener("click", commitName);
+
+  function commitName(): void {
+    const name = nameInput?.value.trim() ?? "";
+    if (!name) return;
+    safeLocalSet(NAME_KEY, name);
+    nameCommitted = true;
+    refresh();
+  }
 
   btnCreate?.addEventListener("click", () => {
     const name = nameInput?.value.trim() ?? "";
-    if (!name) return;
+    if (!name || !nameCommitted) return;
     const roomId = generateRoomId();
     location.hash = roomId;
     enterRoom(roomId, name);
@@ -59,8 +86,19 @@ function setupLobby(): void {
 
   btnJoin?.addEventListener("click", () => {
     const name = nameInput?.value.trim() ?? "";
-    const roomId = hashRoomId();
-    if (!name || !roomId) return;
+    if (!name || !nameCommitted) return;
+    let roomId = hashRoomId();
+    if (!roomId) {
+      const entered = window.prompt("Room ID to join (from shared link, e.g. brave-azure-fox):");
+      if (!entered) return;
+      const trimmed = entered.trim().replace(/^#/, "");
+      if (!isValidRoomId(trimmed)) {
+        setLobbyStatus(`invalid room id: ${trimmed}`);
+        return;
+      }
+      roomId = trimmed;
+      location.hash = roomId;
+    }
     enterRoom(roomId, name);
   });
 
