@@ -13,6 +13,8 @@ import { RoomManager } from "./room-manager";
 import { generateRoomId, isValidRoomId } from "./room-id";
 import type { Vector } from "./vectors";
 import { scaleVector, getCenter } from "./vector-ops";
+import { PeerConnections, type DataMessage } from "./peer-connections";
+import { loadIceServers } from "./ice-config";
 
 const MY_ID = `local-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -193,7 +195,108 @@ window.addEventListener("DOMContentLoaded", () => {
     bottomBar.update();
     participantsPanel.update();
     if (room.state.status === "ended") {
+      stopPeerConnections();
       dialog.show(room.state.endMessage ?? "");
+    }
+  };
+
+  // ---------- Peer-to-peer vector sync ----------
+  let peerConnections: PeerConnections | null = null;
+  let iceServersCache: RTCIceServer[] | null = null;
+
+  const applyRemoteSnapshot = (vectors: Vector[]): void => {
+    // First-join snapshot from host: replace local store with the official set.
+    // (Conflict-aware merge with local additions is a TODO.)
+    state.store.vectors.clear();
+    for (const v of vectors) state.store.vectors.set(v.id, v);
+    state.store.clearHistory();
+    bottomBar.update();
+    invalidate();
+  };
+
+  const handlePeerMessage = (_from: string, msg: DataMessage): void => {
+    if (msg.type === "snapshot") {
+      applyRemoteSnapshot(msg.vectors);
+    } else if (msg.type === "op") {
+      // Remote op: apply without recording in undo, and wipe our local
+      // undo history per the spec (remote changes invalidate it).
+      state.store.apply(msg.op);
+      state.store.clearHistory();
+      bottomBar.update();
+      invalidate();
+    }
+  };
+
+  const startPeerConnections = async (): Promise<void> => {
+    if (peerConnections) return;
+    if (!iceServersCache) iceServersCache = await loadIceServers();
+    peerConnections = new PeerConnections(
+      iceServersCache,
+      { send: (m) => room.send(m) },
+      {
+        onMessage: handlePeerMessage,
+        onChannelOpen: (peerId) => {
+          // Host pushes the current vector set to a newly-connected guest.
+          if (room.isHost() && peerConnections) {
+            const vectors = Array.from(state.store.vectors.values());
+            peerConnections.sendTo(peerId, { type: "snapshot", vectors });
+          }
+        },
+        onChannelClose: () => { /* nothing for now */ },
+      },
+    );
+  };
+
+  function stopPeerConnections(): void {
+    peerConnections?.closeAll();
+    peerConnections = null;
+  }
+
+  // Broadcast local ops (only host broadcasts to all guests for now).
+  state.store.onLocalChange = (op) => {
+    if (room.isHost() && peerConnections) {
+      peerConnections.sendToAll({ type: "op", op });
+    }
+  };
+
+  // Drive WebRTC setup off the raw signaling stream.
+  room.onServerMessage = (msg) => {
+    switch (msg.type) {
+      case "joined":
+        // We've joined. Spin up peer-connections (lazy).
+        startPeerConnections();
+        // If we're the only one, nothing to do yet. Otherwise the host (us
+        // or them) will see peer-joined events and initiate as appropriate.
+        // A guest who joined an existing room waits for the host's offer.
+        if (msg.role === "host") {
+          // Existing peers (if any reconnected) would already be in msg.peers.
+          // In the normal first-create flow this list is empty.
+          for (const p of msg.peers) {
+            void startPeerConnections().then(() => peerConnections?.initiate(p.peerId));
+          }
+        }
+        break;
+      case "peer-joined":
+        // Host initiates connection to new guest. Guests do nothing.
+        if (room.isHost()) {
+          void startPeerConnections().then(() => peerConnections?.initiate(msg.peerId));
+        }
+        break;
+      case "peer-left":
+        peerConnections?.closeConnection(msg.peerId);
+        break;
+      case "offer":
+        void startPeerConnections().then(() => peerConnections?.handleOffer(msg.from, msg.sdp));
+        break;
+      case "answer":
+        peerConnections?.handleAnswer(msg.from, msg.sdp);
+        break;
+      case "ice":
+        peerConnections?.handleIce(msg.from, msg.candidate);
+        break;
+      case "host-changed":
+        // TODO: tear down + rebuild connections around the new host.
+        break;
     }
   };
 

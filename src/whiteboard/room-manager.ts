@@ -1,4 +1,4 @@
-import { connect, type Signaling, type Peer, type ServerMessage } from "./signaling-client";
+import { connect, type Signaling, type Peer, type ServerMessage, type ClientMessage } from "./signaling-client";
 
 export type Role = "host" | "guest";
 export type Perm = "edit" | "view";
@@ -18,7 +18,14 @@ export interface RoomManagerState {
 export class RoomManager {
   state: RoomManagerState = freshState();
   onChange: () => void = () => {};
+  /** Fires for every server message. Used by main.ts to drive
+   * cross-peer WebRTC setup (offer/answer/ice) and react to membership. */
+  onServerMessage?: (msg: ServerMessage) => void;
   private signaling: Signaling | null = null;
+
+  send(msg: ClientMessage): void {
+    this.signaling?.send(msg);
+  }
 
   isHost(): boolean {
     return this.state.you !== null && this.state.you === this.state.hostId;
@@ -75,6 +82,9 @@ export class RoomManager {
 
   private handleMessage(msg: ServerMessage): void {
     if (this.state.status === "ended") return;
+    // External hook (e.g., peer-connections wiring). Fire BEFORE the
+    // internal state mutation so subscribers can see prior state if needed.
+    this.onServerMessage?.(msg);
     switch (msg.type) {
       case "joined":
         this.state.status = "joined";

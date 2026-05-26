@@ -17,6 +17,9 @@ function invert(op: Op): Op {
 
 export class VectorStore {
   vectors: Map<string, Vector> = new Map();
+  /** Fires when a local mutation should be broadcast to peers. Remote ops
+   * applied via apply() do NOT fire this. */
+  onLocalChange?: (op: Op) => void;
   private undoStack: Op[] = [];
   private redoStack: Op[] = [];
 
@@ -43,6 +46,7 @@ export class VectorStore {
     this.apply(op);
     this.undoStack.push(op);
     this.redoStack.length = 0;
+    this.onLocalChange?.(op);
   }
 
   /** Record an op as undoable without applying it (caller has already
@@ -50,6 +54,7 @@ export class VectorStore {
   recordOnly(op: Op): void {
     this.undoStack.push(op);
     this.redoStack.length = 0;
+    this.onLocalChange?.(op);
   }
 
   undo(): Op | null {
@@ -58,6 +63,7 @@ export class VectorStore {
     const inv = invert(op);
     this.apply(inv);
     this.redoStack.push(op);
+    this.onLocalChange?.(inv);
     return inv;
   }
 
@@ -66,6 +72,7 @@ export class VectorStore {
     if (!op) return null;
     this.apply(op);
     this.undoStack.push(op);
+    this.onLocalChange?.(op);
     return op;
   }
 
