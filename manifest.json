@@ -2,19 +2,19 @@
   "name": "whiteboard-web",
   "short_name": "whiteboard",
   "description": "Collaborative p2p whiteboard over WebRTC.",
-  "start_url": "/whiteboard_web/whiteboard/",
-  "scope": "/whiteboard_web/",
+  "start_url": "/whiteboard/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#202020",
   "icons": [
     {
-      "src": "/whiteboard_web/assets/icons/icon-192.png",
+      "src": "/assets/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "/whiteboard_web/assets/icons/icon-512.png",
+      "src": "/assets/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }

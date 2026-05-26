@@ -2,7 +2,7 @@
 
 Collaborative whiteboard (p2p, browser-based) over WebRTC.
 
-Live site: https://andsmith.github.io/whiteboard_web/
+Live site: https://andsmith.net/
 
 ## Layout
 
