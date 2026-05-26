@@ -1,6 +1,7 @@
 import type { Tool, ToolContext } from "./tool";
 import { eventCanvasPoint } from "./tool";
 import { newVectorId, type CircleVector } from "../vectors";
+import { snap } from "../view";
 
 let current: CircleVector | null = null;
 let centerWorld: { x: number; y: number } | null = null;
@@ -16,7 +17,7 @@ export const circleTool: Tool = {
   id: "circle",
   cursor: "crosshair",
   onPointerDown(e, ctx) {
-    centerWorld = ctx.state.view.pixelsToWorld(eventCanvasPoint(e));
+    centerWorld = snap(ctx.state.view.pixelsToWorld(eventCanvasPoint(e)), ctx.state.snapToGrid);
     current = {
       id: newVectorId(),
       kind: "circle",
@@ -33,7 +34,7 @@ export const circleTool: Tool = {
   },
   onPointerMove(e, ctx) {
     if (!current || !centerWorld) return;
-    const w = ctx.state.view.pixelsToWorld(eventCanvasPoint(e));
+    const w = snap(ctx.state.view.pixelsToWorld(eventCanvasPoint(e)), ctx.state.snapToGrid);
     const dx = w.x - centerWorld.x;
     const dy = w.y - centerWorld.y;
     current.radius = Math.sqrt(dx * dx + dy * dy);

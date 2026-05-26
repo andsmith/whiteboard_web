@@ -1,7 +1,7 @@
 import type { Tool, ToolContext } from "./tool";
 import { eventCanvasPoint } from "./tool";
 import { newVectorId, type PolylineVector } from "../vectors";
-import type { Point } from "../view";
+import { snap, type Point } from "../view";
 
 let committed: Point[] = [];
 let cursorWorld: Point | null = null;
@@ -37,7 +37,7 @@ export const polylineTool: Tool = {
   id: "polyline",
   cursor: "crosshair",
   onPointerDown(e, ctx) {
-    const world = ctx.state.view.pixelsToWorld(eventCanvasPoint(e));
+    const world = snap(ctx.state.view.pixelsToWorld(eventCanvasPoint(e)), ctx.state.snapToGrid);
     // Double-click on second-or-later vertex finalizes
     if (proto && committed.length >= 2 && e.detail >= 2) {
       finalize(ctx);
@@ -60,9 +60,12 @@ export const polylineTool: Tool = {
   },
   onPointerMove(e, ctx) {
     if (!proto) return;
-    cursorWorld = ctx.state.view.pixelsToWorld(eventCanvasPoint(e));
+    cursorWorld = snap(ctx.state.view.pixelsToWorld(eventCanvasPoint(e)), ctx.state.snapToGrid);
     setInProgress(ctx);
     ctx.invalidate();
+  },
+  onMiddleClick(_e, ctx) {
+    finalize(ctx);
   },
   onKeyDown(e, ctx) {
     if (e.key === "Enter") {

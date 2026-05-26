@@ -21,6 +21,9 @@ export interface Tool {
   onKeyDown?(e: KeyboardEvent, ctx: ToolContext): void;
   /** Called when switching away from this tool. Cancels any in-progress state. */
   onDeselect?(ctx: ToolContext): void;
+  /** Middle-button click. If a tool implements this, it overrides the
+   * default middle-click pan. */
+  onMiddleClick?(e: PointerEvent, ctx: ToolContext): void;
 }
 
 export function eventCanvasPoint(e: PointerEvent): { x: number; y: number } {

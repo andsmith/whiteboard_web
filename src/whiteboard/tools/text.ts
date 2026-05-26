@@ -1,6 +1,7 @@
 import type { Tool } from "./tool";
 import { eventCanvasPoint } from "./tool";
 import { newVectorId, type TextVector } from "../vectors";
+import { snap } from "../view";
 
 export const textTool: Tool = {
   id: "text",
@@ -8,7 +9,7 @@ export const textTool: Tool = {
   onPointerDown(e, ctx) {
     const text = window.prompt("Text:");
     if (text === null || text === "") return;
-    const world = ctx.state.view.pixelsToWorld(eventCanvasPoint(e));
+    const world = snap(ctx.state.view.pixelsToWorld(eventCanvasPoint(e)), ctx.state.snapToGrid);
     const v: TextVector = {
       id: newVectorId(),
       kind: "text",

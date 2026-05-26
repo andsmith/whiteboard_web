@@ -1,6 +1,7 @@
 import type { Tool, ToolContext } from "./tool";
 import { eventCanvasPoint } from "./tool";
 import { newVectorId, type RectVector } from "../vectors";
+import { snap } from "../view";
 
 let current: RectVector | null = null;
 
@@ -14,7 +15,7 @@ export const rectTool: Tool = {
   id: "rect",
   cursor: "crosshair",
   onPointerDown(e, ctx) {
-    const world = ctx.state.view.pixelsToWorld(eventCanvasPoint(e));
+    const world = snap(ctx.state.view.pixelsToWorld(eventCanvasPoint(e)), ctx.state.snapToGrid);
     current = {
       id: newVectorId(),
       kind: "rect",
@@ -30,7 +31,7 @@ export const rectTool: Tool = {
   },
   onPointerMove(e, ctx) {
     if (!current) return;
-    current.b = ctx.state.view.pixelsToWorld(eventCanvasPoint(e));
+    current.b = snap(ctx.state.view.pixelsToWorld(eventCanvasPoint(e)), ctx.state.snapToGrid);
     ctx.invalidate();
   },
   onPointerUp(_e, ctx) {

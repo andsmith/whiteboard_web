@@ -176,16 +176,58 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // ---------- Canvas pointer events → current tool ----------
   canvas.style.cursor = TOOLS[state.currentTool].cursor;
+
+  // Middle-button pan state (overrides whatever the current tool would do).
+  let middlePanLast: { x: number; y: number } | null = null;
+  const endMiddlePan = (e: PointerEvent) => {
+    middlePanLast = null;
+    canvas.style.cursor = TOOLS[state.currentTool].cursor;
+    (e.target as Element).releasePointerCapture?.(e.pointerId);
+  };
+
+  // Suppress browser middle-click auto-scroll affordance.
+  canvas.addEventListener("mousedown", (e) => {
+    if (e.button === 1) e.preventDefault();
+  });
+
   canvas.addEventListener("pointerdown", (e) => {
+    if (e.button === 1) {
+      e.preventDefault();
+      const tool = TOOLS[state.currentTool];
+      if (tool.onMiddleClick) {
+        tool.onMiddleClick(e, toolCtx);
+      } else {
+        middlePanLast = { x: e.clientX, y: e.clientY };
+        canvas.style.cursor = "grabbing";
+        (e.target as Element).setPointerCapture?.(e.pointerId);
+      }
+      return;
+    }
     TOOLS[state.currentTool].onPointerDown?.(e, toolCtx);
   });
   canvas.addEventListener("pointermove", (e) => {
+    if (middlePanLast) {
+      const dx = e.clientX - middlePanLast.x;
+      const dy = e.clientY - middlePanLast.y;
+      state.view.pan({ x: dx, y: dy });
+      middlePanLast = { x: e.clientX, y: e.clientY };
+      invalidate();
+      return;
+    }
     TOOLS[state.currentTool].onPointerMove?.(e, toolCtx);
   });
   canvas.addEventListener("pointerup", (e) => {
+    if (e.button === 1 && middlePanLast) {
+      endMiddlePan(e);
+      return;
+    }
     TOOLS[state.currentTool].onPointerUp?.(e, toolCtx);
   });
   canvas.addEventListener("pointercancel", (e) => {
+    if (middlePanLast) {
+      endMiddlePan(e);
+      return;
+    }
     TOOLS[state.currentTool].onPointerUp?.(e, toolCtx);
   });
 

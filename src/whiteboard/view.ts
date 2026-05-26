@@ -2,6 +2,15 @@ export interface Point { x: number; y: number; }
 
 export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 20;
+export const GRID_CELL_WORLD = 20;
+
+export function snap(p: Point, enabled: boolean): Point {
+  if (!enabled) return p;
+  return {
+    x: Math.round(p.x / GRID_CELL_WORLD) * GRID_CELL_WORLD,
+    y: Math.round(p.y / GRID_CELL_WORLD) * GRID_CELL_WORLD,
+  };
+}
 
 export class BoardView {
   origin: Point = { x: 0, y: 0 };
