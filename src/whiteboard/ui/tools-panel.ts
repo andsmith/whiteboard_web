@@ -1,7 +1,7 @@
 import type { AppState, ColorHex } from "../app-state";
 import { COLORS } from "../app-state";
 import type { ToolId } from "../tools/tool";
-import { TOOL_ORDER } from "../tools/registry";
+import { NAV_TOOL_ORDER, DRAW_TOOL_ORDER } from "../tools/registry";
 import { ICONS } from "./icons";
 
 export interface ToolsPanelHandle {
@@ -13,24 +13,26 @@ export function mountToolsPanel(opts: {
   onToolChange: (t: ToolId) => void;
   onColorChange: (c: ColorHex) => void;
 }): ToolsPanelHandle {
-  const toolsHost = document.getElementById("tools-group") as HTMLElement | null;
+  const navHost = document.getElementById("nav-tools") as HTMLElement | null;
+  const drawHost = document.getElementById("draw-tools") as HTMLElement | null;
   const colorsHost = document.getElementById("colors-group") as HTMLElement | null;
 
-  // Render tools (3x2 grid)
-  if (toolsHost) {
-    toolsHost.innerHTML = "";
-    for (const t of TOOL_ORDER) {
+  const renderTools = (host: HTMLElement | null, ids: ToolId[]) => {
+    if (!host) return;
+    host.innerHTML = "";
+    for (const t of ids) {
       const btn = document.createElement("button");
       btn.className = "tool-btn";
       btn.dataset.tool = t;
       btn.title = capitalize(t);
       btn.innerHTML = ICONS[t] ?? "";
       btn.addEventListener("click", () => opts.onToolChange(t));
-      toolsHost.appendChild(btn);
+      host.appendChild(btn);
     }
-  }
+  };
+  renderTools(navHost, NAV_TOOL_ORDER);
+  renderTools(drawHost, DRAW_TOOL_ORDER);
 
-  // Render colors (4x2 grid)
   if (colorsHost) {
     colorsHost.innerHTML = "";
     for (const c of COLORS) {
@@ -45,8 +47,10 @@ export function mountToolsPanel(opts: {
   }
 
   const update = () => {
-    toolsHost?.querySelectorAll<HTMLButtonElement>(".tool-btn").forEach((b) => {
-      b.classList.toggle("selected", b.dataset.tool === opts.state.currentTool);
+    [navHost, drawHost].forEach((host) => {
+      host?.querySelectorAll<HTMLButtonElement>(".tool-btn").forEach((b) => {
+        b.classList.toggle("selected", b.dataset.tool === opts.state.currentTool);
+      });
     });
     colorsHost?.querySelectorAll<HTMLButtonElement>(".color-btn").forEach((b) => {
       b.classList.toggle("selected", b.dataset.color === opts.state.color);

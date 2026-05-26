@@ -64,9 +64,12 @@ html, body {
 /* Left panel — tools + colors */
 #tools-panel {
   position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-  display: flex; flex-direction: column; gap: 38px;
+  display: flex; flex-direction: column; gap: 10px;
   z-index: 2; pointer-events: none;
 }
+#tools-panel .nav-tools { /* small gap to draw-tools comes from #tools-panel gap */ }
+#tools-panel .draw-tools { margin-top: 0; }
+#tools-panel #colors-group { margin-top: 28px; } /* ~one-icon gap from drawing tools */
 #tools-panel > * { pointer-events: auto; }
 .tool-group {
   display: grid; grid-template-columns: repeat(2, 38px); gap: 6px;

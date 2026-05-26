@@ -1,5 +1,7 @@
 import { BoardView } from "./view";
+import { VectorStore } from "./vector-store";
 import type { ToolId } from "./tools/tool";
+import type { Vector } from "./vectors";
 
 export const COLORS = [
   "#000000", "#808080",
@@ -19,6 +21,9 @@ export interface AppState {
   showGrid: boolean;
   snapToGrid: boolean;
   participantsExpanded: boolean;
+  store: VectorStore;
+  /** Live preview vector being drawn — rendered but not yet committed. */
+  inProgress: Vector | null;
 }
 
 export function createInitialState(): AppState {
@@ -27,9 +32,11 @@ export function createInitialState(): AppState {
     currentTool: "pan",
     color: COLORS[0],
     thickness: 2,
-    fontSize: 14,
+    fontSize: 16,
     showGrid: true,
     snapToGrid: false,
-    participantsExpanded: false,
+    participantsExpanded: true,
+    store: new VectorStore(),
+    inProgress: null,
   };
 }

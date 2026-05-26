@@ -1,15 +1,30 @@
 import { panTool } from "./pan";
-import { pencilTool, lineTool, rectTool, circleTool, selectTool } from "./stubs";
+import { selectTool } from "./select";
+import { pencilTool } from "./pencil";
+import { lineTool } from "./line";
+import { rectTool } from "./rect";
+import { circleTool } from "./circle";
+import { textTool } from "./text";
+import { polylineTool } from "./polyline";
 import type { Tool, ToolId } from "./tool";
 
 export const TOOLS: Record<ToolId, Tool> = {
+  select: selectTool,
+  pan: panTool,
   pencil: pencilTool,
   line: lineTool,
   rect: rectTool,
   circle: circleTool,
-  select: selectTool,
-  pan: panTool,
+  text: textTool,
+  polyline: polylineTool,
 };
 
-// 3 rows × 2 cols, matches reference (pencil/line, rect/circle, select/pan)
-export const TOOL_ORDER: ToolId[] = ["pencil", "line", "rect", "circle", "select", "pan"];
+// Navigation tools (top of left panel, separated from drawing tools)
+export const NAV_TOOL_ORDER: ToolId[] = ["select", "pan"];
+
+// Drawing tools (3×2 grid below)
+export const DRAW_TOOL_ORDER: ToolId[] = [
+  "pencil", "line",
+  "rect", "circle",
+  "text", "polyline",
+];

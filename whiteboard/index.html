@@ -19,7 +19,8 @@
         <canvas id="canvas"></canvas>
 
         <div id="tools-panel">
-          <div id="tools-group" class="tool-group"></div>
+          <div id="nav-tools" class="tool-group nav-tools"></div>
+          <div id="draw-tools" class="tool-group draw-tools"></div>
           <div id="colors-group" class="color-group"></div>
         </div>
 
@@ -40,7 +41,12 @@
         <div class="bottom-group">
           <button id="btn-undo" class="cmd-btn" type="button" title="Undo"></button>
           <button id="btn-redo" class="cmd-btn" type="button" title="Redo"></button>
-          <button id="btn-clear" class="cmd-btn" type="button" title="Clear (host only)"></button>
+          <button id="btn-trash" class="cmd-btn" type="button" title="Trash my changes"></button>
+        </div>
+        <div class="divider"></div>
+        <div class="bottom-group">
+          <button id="btn-save" class="cmd-btn" type="button" title="Save to file"></button>
+          <button id="btn-load" class="cmd-btn" type="button" title="Load from file"></button>
         </div>
         <div class="divider"></div>
         <div class="bottom-group">
