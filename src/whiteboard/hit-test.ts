@@ -73,9 +73,18 @@ export function hitTest(
       return distanceToSegment(screenPt, a, b) <= HIT_TOLERANCE_PX;
     }
     case "rect": {
-      const a = view.worldToPixels(v.a);
-      const b = view.worldToPixels(v.b);
-      return distanceToRectOutline(screenPt, a, b) <= HIT_TOLERANCE_PX;
+      // Transform screenPt into the rect's local (unrotated) frame, then
+      // test against an axis-aligned outline.
+      const centerW = { x: (v.a.x + v.b.x) / 2, y: (v.a.y + v.b.y) / 2 };
+      const centerPx = view.worldToPixels(centerW);
+      const halfW = Math.abs(v.b.x - v.a.x) / 2 * view.zoom;
+      const halfH = Math.abs(v.b.y - v.a.y) / 2 * view.zoom;
+      const rot = v.rotation ?? 0;
+      const cos = Math.cos(-rot), sin = Math.sin(-rot);
+      const dx = screenPt.x - centerPx.x;
+      const dy = screenPt.y - centerPx.y;
+      const local: Point = { x: dx * cos - dy * sin, y: dx * sin + dy * cos };
+      return distanceToRectOutline(local, { x: -halfW, y: -halfH }, { x: halfW, y: halfH }) <= HIT_TOLERANCE_PX;
     }
     case "circle": {
       const c = view.worldToPixels(v.center);
@@ -91,14 +100,43 @@ export function hitTest(
       }
       return false;
     }
-    case "pencil":
-    case "text": {
+    case "pencil": {
       const bb = bboxPx(v, view, ctx);
       const padX = Math.max(0, (MIN_BBOX_PX - (bb.maxX - bb.minX)) / 2);
       const padY = Math.max(0, (MIN_BBOX_PX - (bb.maxY - bb.minY)) / 2);
       return (
         screenPt.x >= bb.minX - padX && screenPt.x <= bb.maxX + padX &&
         screenPt.y >= bb.minY - padY && screenPt.y <= bb.maxY + padY
+      );
+    }
+    case "text": {
+      // Transform screenPt into the text's local frame (un-rotate around pos),
+      // then test against the unrotated bbox of the laid-out lines.
+      const posPx = view.worldToPixels(v.pos);
+      const rot = v.rotation ?? 0;
+      const cos = Math.cos(-rot), sin = Math.sin(-rot);
+      const dx = screenPt.x - posPx.x;
+      const dy = screenPt.y - posPx.y;
+      const local: Point = { x: dx * cos - dy * sin, y: dx * sin + dy * cos };
+      const px = Math.max(8, v.fontSize * view.zoom);
+      const lines = v.text.split("\n");
+      const lineHeight = px * 1.5;
+      let maxWidth = 0;
+      if (ctx) {
+        ctx.save();
+        ctx.font = `${px}px system-ui, -apple-system, sans-serif`;
+        for (const line of lines) maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
+        ctx.restore();
+      } else {
+        for (const line of lines) maxWidth = Math.max(maxWidth, line.length * px * 0.6);
+      }
+      const minX = 0, maxX = maxWidth;
+      const minY = -px, maxY = -px + lines.length * lineHeight;
+      const padX = Math.max(0, (MIN_BBOX_PX - (maxX - minX)) / 2);
+      const padY = Math.max(0, (MIN_BBOX_PX - (maxY - minY)) / 2);
+      return (
+        local.x >= minX - padX && local.x <= maxX + padX &&
+        local.y >= minY - padY && local.y <= maxY + padY
       );
     }
   }

@@ -53,16 +53,26 @@ export function rotateVector(v: Vector, angleRad: number, center: Point): Vector
       return { ...v, points: v.points.map(r) };
     case "line":
       return { ...v, a: r(v.a), b: r(v.b) };
-    case "rect":
-      // Rect model is axis-aligned; rotating distorts the shape. As a
-      // compromise, rotate only the center and keep the rect axis-aligned.
-      // (TODO: convert to polyline or add a rotation field.)
-      return { ...v, a: r(v.a), b: r(v.b) };
+    case "rect": {
+      // Translate the rect's center along the rotation, and accumulate the
+      // local rotation so it renders rotated around its own center.
+      const own = { x: (v.a.x + v.b.x) / 2, y: (v.a.y + v.b.y) / 2 };
+      const newOwn = r(own);
+      const dx = newOwn.x - own.x;
+      const dy = newOwn.y - own.y;
+      return {
+        ...v,
+        a: { x: v.a.x + dx, y: v.a.y + dy },
+        b: { x: v.b.x + dx, y: v.b.y + dy },
+        rotation: (v.rotation ?? 0) + angleRad,
+      };
+    }
     case "circle":
       return { ...v, center: r(v.center) };
-    case "text":
-      // Text model has no rotation field; only translate.
-      return { ...v, pos: r(v.pos) };
+    case "text": {
+      // Translate the text's anchor point and accumulate rotation.
+      return { ...v, pos: r(v.pos), rotation: (v.rotation ?? 0) + angleRad };
+    }
   }
 }
 

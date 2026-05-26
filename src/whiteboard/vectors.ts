@@ -13,10 +13,18 @@ export interface BaseVector {
 
 export interface PencilVector extends BaseVector { kind: "pencil"; points: Point[]; }
 export interface LineVector extends BaseVector { kind: "line"; a: Point; b: Point; }
-export interface RectVector extends BaseVector { kind: "rect"; a: Point; b: Point; }
+export interface RectVector extends BaseVector {
+  kind: "rect"; a: Point; b: Point;
+  /** Rotation in radians around the rect's center, applied at render time. */
+  rotation?: number;
+}
 export interface CircleVector extends BaseVector { kind: "circle"; center: Point; radius: number; }
 export interface PolylineVector extends BaseVector { kind: "polyline"; points: Point[]; }
-export interface TextVector extends BaseVector { kind: "text"; pos: Point; text: string; fontSize: number; }
+export interface TextVector extends BaseVector {
+  kind: "text"; pos: Point; text: string; fontSize: number;
+  /** Rotation in radians around `pos` (the top-left baseline anchor). */
+  rotation?: number;
+}
 
 export type Vector = PencilVector | LineVector | RectVector | CircleVector | PolylineVector | TextVector;
 

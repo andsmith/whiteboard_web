@@ -169,12 +169,17 @@ export class CanvasRenderer {
         break;
       }
       case "rect": {
-        const a = view.worldToPixels(v.a);
-        const b = view.worldToPixels(v.b);
+        const centerW = { x: (v.a.x + v.b.x) / 2, y: (v.a.y + v.b.y) / 2 };
+        const centerPx = view.worldToPixels(centerW);
+        const wPx = Math.abs(v.b.x - v.a.x) * view.zoom;
+        const hPx = Math.abs(v.b.y - v.a.y) * view.zoom;
+        ctx.save();
+        ctx.translate(centerPx.x, centerPx.y);
+        if (v.rotation) ctx.rotate(v.rotation);
         ctx.beginPath();
-        ctx.rect(Math.min(a.x, b.x), Math.min(a.y, b.y),
-                 Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+        ctx.rect(-wPx / 2, -hPx / 2, wPx, hPx);
         ctx.stroke();
+        ctx.restore();
         break;
       }
       case "circle": {
@@ -203,9 +208,13 @@ export class CanvasRenderer {
     const lineHeight = px * 1.5;
     const start = view.worldToPixels(v.pos);
     const lines = v.text.split("\n");
+    ctx.save();
+    ctx.translate(start.x, start.y);
+    if (v.rotation) ctx.rotate(v.rotation);
     for (let i = 0; i < lines.length; i++) {
-      ctx.fillText(lines[i]!, start.x, start.y + i * lineHeight);
+      ctx.fillText(lines[i]!, 0, i * lineHeight);
     }
+    ctx.restore();
   }
 
   private drawTextCursor(v: TextVector): void {
