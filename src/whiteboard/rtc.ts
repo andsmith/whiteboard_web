@@ -1,8 +1,4 @@
-const DEFAULT_CONFIG: RTCConfiguration = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-};
-
-export function createPeer(config: RTCConfiguration = DEFAULT_CONFIG): RTCPeerConnection {
+export function createPeer(config: RTCConfiguration): RTCPeerConnection {
   return new RTCPeerConnection(config);
 }
 

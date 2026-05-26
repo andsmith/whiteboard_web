@@ -1,0 +1,12 @@
+name = "whiteboard-turn"
+main = "src/index.ts"
+compatibility_date = "2025-01-15"
+
+# Public, non-secret config. METERED_DOMAIN is the "Metered domain" value
+# from your metered.ca app dashboard (e.g. "andsmith-whiteboard.metered.live").
+[vars]
+METERED_DOMAIN = "whiteboard-web.metered.live"
+ALLOWED_ORIGINS = "https://andsmith.net,https://www.andsmith.net,http://localhost:5173"
+
+# The metered "Secret key" is stored as a Worker secret, NOT in this file:
+#   npx wrangler secret put METERED_API_KEY

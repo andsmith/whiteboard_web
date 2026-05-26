@@ -1,12 +1,16 @@
 import { initBoard } from "./board";
 import { createPeer, createOffer, acceptOffer, acceptAnswer } from "./rtc";
 import { readRemoteSDP, writeLocalSDP, setStatus } from "./signaling";
+import { loadIceServers } from "./ice-config";
 
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
   const canvas = document.getElementById("board") as HTMLCanvasElement | null;
   if (canvas) initBoard(canvas);
 
-  const peer = createPeer();
+  setStatus("loading TURN credentials...");
+  const iceServers = await loadIceServers();
+  const peer = createPeer({ iceServers });
+  setStatus("idle");
 
   peer.addEventListener("connectionstatechange", () => {
     setStatus(`peer: ${peer.connectionState}`);
