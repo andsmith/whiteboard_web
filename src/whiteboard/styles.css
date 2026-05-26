@@ -125,11 +125,37 @@ html, body {
 .cmd-btn.on svg { opacity: 1; }
 
 #zoom-area {
-  flex: 1; display: flex; align-items: center; gap: 10px;
+  flex: 1; display: flex; align-items: center; justify-content: flex-end;
   margin-left: 8px;
 }
-#zoom-label { font-size: 0.85rem; color: var(--ink-faint); min-width: 5.5em; }
-#zoom-slider { flex: 1; max-width: 480px; }
+#zoom-label { font-size: 0.85rem; color: var(--ink-faint); }
+
+/* Drag-dial popups (thickness, fontsize) */
+.dial-popup {
+  position: fixed;
+  display: none;
+  background: white;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  box-shadow: var(--shadow-md);
+  z-index: 100;
+  min-width: 140px;
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
+  transform: translate(-50%, calc(-100% - 10px));
+  transform-origin: bottom center;
+}
+.dial-label { font-size: 0.8rem; color: var(--ink-faint); margin-bottom: 8px; }
+.dial-label span { color: var(--ink); font-weight: 600; }
+#fontsize-sample {
+  font-family: serif;
+  line-height: 1;
+  display: inline-block;
+  min-height: 1em;
+}
+.cmd-btn.dragging { outline: 1.5px solid var(--select); outline-offset: 2px; }
 
 /* Right panel — participants */
 #participants-panel {

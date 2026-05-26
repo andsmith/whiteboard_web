@@ -6,6 +6,7 @@ import type { ToolContext, ToolId } from "./tools/tool";
 import { mountTitleBar, type TitleStatus } from "./ui/title-bar";
 import { mountToolsPanel } from "./ui/tools-panel";
 import { mountBottomBar, type TrashMode } from "./ui/bottom-bar";
+import { mountDial } from "./ui/dials";
 import { mountParticipantsPanel } from "./ui/participants-panel";
 import { mountJoinDialog } from "./ui/join-dialog";
 import { RoomManager } from "./room-manager";
@@ -87,13 +88,6 @@ window.addEventListener("DOMContentLoaded", () => {
     state,
     isHost: () => room.isHost(),
     trashMode,
-    onZoomChange: (z) => {
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
-      state.view.zoomAt({ x: w / 2, y: h / 2 }, z);
-      bottomBar.update();
-      invalidate();
-    },
     onShowGridToggle: () => {
       state.showGrid = !state.showGrid;
       bottomBar.update();
@@ -131,6 +125,34 @@ window.addEventListener("DOMContentLoaded", () => {
         window.alert(`Load failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     }),
+  });
+
+  // ---------- Drag-dials for thickness and fontsize ----------
+  mountDial({
+    buttonId: "btn-thickness",
+    popupId: "thickness-popup",
+    getValue: () => state.thickness,
+    setValue: (v) => { state.thickness = v; },
+    min: 1, max: 30, step: 1,
+    render: (v) => {
+      const valEl = document.getElementById("thickness-value");
+      if (valEl) valEl.textContent = String(v);
+      const line = document.querySelector<SVGLineElement>("#thickness-sample line");
+      if (line) line.setAttribute("stroke-width", String(v));
+    },
+  });
+  mountDial({
+    buttonId: "btn-fontsize",
+    popupId: "fontsize-popup",
+    getValue: () => state.fontSize,
+    setValue: (v) => { state.fontSize = v; },
+    min: 6, max: 96, step: 1,
+    render: (v) => {
+      const valEl = document.getElementById("fontsize-value");
+      if (valEl) valEl.textContent = String(v);
+      const sample = document.getElementById("fontsize-sample");
+      if (sample) sample.style.fontSize = `${v}px`;
+    },
   });
 
   const participantsPanel = mountParticipantsPanel({
@@ -177,11 +199,14 @@ window.addEventListener("DOMContentLoaded", () => {
   // ---------- Canvas pointer events → current tool ----------
   canvas.style.cursor = TOOLS[state.currentTool].cursor;
 
-  // Middle-button pan state (overrides whatever the current tool would do).
-  let middlePanLast: { x: number; y: number } | null = null;
-  const endMiddlePan = (e: PointerEvent) => {
-    middlePanLast = null;
-    canvas.style.cursor = TOOLS[state.currentTool].cursor;
+  // Pan-override state. Triggered by middle-button OR by left-button while
+  // Control is held. Overrides whatever the current tool would do.
+  let panLast: { x: number; y: number } | null = null;
+  let ctrlHeld = false;
+
+  const endPan = (e: PointerEvent) => {
+    panLast = null;
+    canvas.style.cursor = ctrlHeld ? "grab" : TOOLS[state.currentTool].cursor;
     (e.target as Element).releasePointerCapture?.(e.pointerId);
   };
 
@@ -191,44 +216,73 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 
   canvas.addEventListener("pointerdown", (e) => {
+    // Middle button: tool can override (polyline finalizes), else pan.
     if (e.button === 1) {
       e.preventDefault();
       const tool = TOOLS[state.currentTool];
       if (tool.onMiddleClick) {
         tool.onMiddleClick(e, toolCtx);
       } else {
-        middlePanLast = { x: e.clientX, y: e.clientY };
+        panLast = { x: e.clientX, y: e.clientY };
         canvas.style.cursor = "grabbing";
         (e.target as Element).setPointerCapture?.(e.pointerId);
       }
       return;
     }
+    // Left button + Ctrl: pan override.
+    if (e.button === 0 && e.ctrlKey) {
+      e.preventDefault();
+      panLast = { x: e.clientX, y: e.clientY };
+      canvas.style.cursor = "grabbing";
+      (e.target as Element).setPointerCapture?.(e.pointerId);
+      return;
+    }
     TOOLS[state.currentTool].onPointerDown?.(e, toolCtx);
   });
   canvas.addEventListener("pointermove", (e) => {
-    if (middlePanLast) {
-      const dx = e.clientX - middlePanLast.x;
-      const dy = e.clientY - middlePanLast.y;
+    if (panLast) {
+      const dx = e.clientX - panLast.x;
+      const dy = e.clientY - panLast.y;
       state.view.pan({ x: dx, y: dy });
-      middlePanLast = { x: e.clientX, y: e.clientY };
+      panLast = { x: e.clientX, y: e.clientY };
       invalidate();
       return;
     }
     TOOLS[state.currentTool].onPointerMove?.(e, toolCtx);
   });
   canvas.addEventListener("pointerup", (e) => {
-    if (e.button === 1 && middlePanLast) {
-      endMiddlePan(e);
+    if (panLast) {
+      endPan(e);
       return;
     }
     TOOLS[state.currentTool].onPointerUp?.(e, toolCtx);
   });
   canvas.addEventListener("pointercancel", (e) => {
-    if (middlePanLast) {
-      endMiddlePan(e);
+    if (panLast) {
+      endPan(e);
       return;
     }
     TOOLS[state.currentTool].onPointerUp?.(e, toolCtx);
+  });
+
+  // Track Ctrl key to preview the pan cursor before any click.
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Control" && !ctrlHeld) {
+      ctrlHeld = true;
+      if (!panLast) canvas.style.cursor = "grab";
+    }
+  });
+  window.addEventListener("keyup", (e) => {
+    if (e.key === "Control" && ctrlHeld) {
+      ctrlHeld = false;
+      if (!panLast) canvas.style.cursor = TOOLS[state.currentTool].cursor;
+    }
+  });
+  window.addEventListener("blur", () => {
+    if (ctrlHeld) {
+      ctrlHeld = false;
+      if (!panLast) canvas.style.cursor = TOOLS[state.currentTool].cursor;
+    }
   });
 
   // Wheel zoom around cursor (only when no in-progress drawing)

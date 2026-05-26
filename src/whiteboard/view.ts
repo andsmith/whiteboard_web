@@ -1,7 +1,5 @@
 export interface Point { x: number; y: number; }
 
-export const MIN_ZOOM = 0.1;
-export const MAX_ZOOM = 20;
 export const GRID_CELL_WORLD = 20;
 
 export function snap(p: Point, enabled: boolean): Point {
@@ -30,8 +28,9 @@ export class BoardView {
   }
 
   zoomAt(pivotPx: Point, newZoom: number): void {
+    if (!Number.isFinite(newZoom) || newZoom <= 0) return;
     const worldBefore = this.pixelsToWorld(pivotPx);
-    this.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newZoom));
+    this.zoom = newZoom;
     this.origin.x = worldBefore.x - pivotPx.x / this.zoom;
     this.origin.y = worldBefore.y - pivotPx.y / this.zoom;
   }

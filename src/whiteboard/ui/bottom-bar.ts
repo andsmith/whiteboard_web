@@ -1,22 +1,8 @@
 import type { AppState } from "../app-state";
-import { MIN_ZOOM, MAX_ZOOM } from "../view";
 import { ICONS } from "./icons";
 
 export interface BottomBarHandle {
   update: () => void;
-}
-
-const SLIDER_MIN = 0;
-const SLIDER_MAX = 1000;
-
-function zoomToSlider(z: number): number {
-  const t = (Math.log(z) - Math.log(MIN_ZOOM)) / (Math.log(MAX_ZOOM) - Math.log(MIN_ZOOM));
-  return Math.round(t * SLIDER_MAX);
-}
-
-function sliderToZoom(s: number): number {
-  const t = s / SLIDER_MAX;
-  return Math.exp(Math.log(MIN_ZOOM) + t * (Math.log(MAX_ZOOM) - Math.log(MIN_ZOOM)));
 }
 
 export type TrashMode = "trash" | "refresh";
@@ -25,7 +11,6 @@ export function mountBottomBar(opts: {
   state: AppState;
   isHost: () => boolean;
   trashMode: () => TrashMode;
-  onZoomChange: (z: number) => void;
   onShowGridToggle: () => void;
   onSnapGridToggle: () => void;
   onUndo: () => void;
@@ -55,42 +40,26 @@ export function mountBottomBar(opts: {
   document.getElementById("btn-load")?.addEventListener("click", opts.onLoad);
   document.getElementById("btn-snapgrid")?.addEventListener("click", opts.onSnapGridToggle);
   document.getElementById("btn-showgrid")?.addEventListener("click", opts.onShowGridToggle);
-
-  const slider = document.getElementById("zoom-slider") as HTMLInputElement | null;
-  if (slider) {
-    slider.min = String(SLIDER_MIN);
-    slider.max = String(SLIDER_MAX);
-    slider.step = "1";
-    slider.value = String(zoomToSlider(opts.state.view.zoom));
-    slider.addEventListener("input", () => opts.onZoomChange(sliderToZoom(Number(slider.value))));
-  }
+  // btn-thickness and btn-fontsize have their pointer handlers wired by mountDial().
 
   const update = () => {
-    // Trash / Refresh — relabel & swap icon based on role
     const trashBtn = document.getElementById("btn-trash") as HTMLButtonElement | null;
     if (trashBtn) {
       const mode = opts.trashMode();
-      const icon = mode === "trash" ? ICONS.trash! : ICONS.refresh!;
-      trashBtn.innerHTML = icon;
+      trashBtn.innerHTML = mode === "trash" ? ICONS.trash! : ICONS.refresh!;
       trashBtn.title = mode === "trash" ? "Trash my changes" : "Refresh from official state";
     }
 
-    // Undo/redo disabled when stack empty
     const undoBtn = document.getElementById("btn-undo") as HTMLButtonElement | null;
     const redoBtn = document.getElementById("btn-redo") as HTMLButtonElement | null;
     if (undoBtn) undoBtn.disabled = !opts.state.store.canUndo();
     if (redoBtn) redoBtn.disabled = !opts.state.store.canRedo();
 
-    // Toggle states
     document.getElementById("btn-snapgrid")?.classList.toggle("on", opts.state.snapToGrid);
     document.getElementById("btn-showgrid")?.classList.toggle("on", opts.state.showGrid);
 
     const label = document.getElementById("zoom-label");
     if (label) label.textContent = `Zoom: ${opts.state.view.zoom.toFixed(2)}`;
-    if (slider) {
-      const targetVal = String(zoomToSlider(opts.state.view.zoom));
-      if (slider.value !== targetVal) slider.value = targetVal;
-    }
   };
   update();
   return { update };
