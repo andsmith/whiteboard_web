@@ -8,6 +8,7 @@ const BG_COLOR = "#F1FAFF";
 const GRID_LIGHT = "rgba(0,0,0,0.06)";
 const GRID_HEAVY = "rgba(0,0,0,0.12)";
 const HOVER_COLOR = "#39FF14";
+const DRAG_COLOR = "#1080ff";
 const RADIAL_ICON_R = 22;
 const RADIAL_ICON_R_HOVER = 26;
 
@@ -68,8 +69,10 @@ export class CanvasRenderer {
     if (this.state.showGrid) this.drawGrid(w, h);
 
     for (const v of this.state.store.vectors.values()) {
+      const isDragging = this.state.dragLockedTargetId === v.id;
       const isHovered = this.state.hoverId === v.id;
-      this.drawVector(v, { override: isHovered ? HOVER_COLOR : undefined });
+      const override = isDragging ? DRAG_COLOR : (isHovered ? HOVER_COLOR : undefined);
+      this.drawVector(v, { override });
     }
     if (this.state.inProgress) {
       this.drawVector(this.state.inProgress, { alpha: 0.7 });

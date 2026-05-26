@@ -59,6 +59,16 @@ function reset(ctx: ToolContext): void {
   ctx.invalidate();
 }
 
+function openRadialMenu(ctx: ToolContext, hit: Vector, screenPt: Point, pointerId: number, target: EventTarget | null): void {
+  mode = "menuOpen";
+  targetId = hit.id;
+  original = hit;
+  menuPos = screenPt;
+  ctx.state.radialMenu = { pos: screenPt, targetId: hit.id, hoverIcon: null };
+  (target as Element | null)?.setPointerCapture?.(pointerId);
+  ctx.invalidate();
+}
+
 function startMove(ctx: ToolContext, hit: Vector, screenPt: Point, pointerId: number, target: EventTarget | null): void {
   mode = "moving";
   targetId = hit.id;
@@ -100,7 +110,7 @@ export const modifyTool: Tool = {
   cursor: "default",
 
   onPointerDown(e, ctx) {
-    if (e.button !== 0 && e.button !== 1) return;
+    if (e.button !== 0) return;
     const screenPt = eventCanvasPoint(e);
 
     // If in a continuation mode, a click commits.
@@ -113,23 +123,25 @@ export const modifyTool: Tool = {
     const hit = findHit(ctx.state.store.vectors.values(), screenPt, ctx.state.view, getCanvasCtx());
     if (!hit) return;
 
-    // Middle-click OR shift+left-click → radial menu
-    if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
+    // Shift+left-click → radial menu (same as middle-click via onMiddleClick)
+    if (e.shiftKey) {
       e.preventDefault();
-      mode = "menuOpen";
-      targetId = hit.id;
-      original = hit;
-      menuPos = screenPt;
-      ctx.state.radialMenu = { pos: screenPt, targetId: hit.id, hoverIcon: null };
-      (e.target as Element).setPointerCapture?.(e.pointerId);
-      ctx.invalidate();
+      openRadialMenu(ctx, hit, screenPt, e.pointerId, e.target);
       return;
     }
 
-    // Plain left click → move
-    if (e.button === 0) {
-      startMove(ctx, hit, screenPt, e.pointerId, e.target);
+    startMove(ctx, hit, screenPt, e.pointerId, e.target);
+  },
+  onMiddleClick(e, ctx) {
+    if (mode === "rotating" || mode === "scaling") {
+      commitTransform(ctx);
+      reset(ctx);
+      return;
     }
+    const screenPt = eventCanvasPoint(e);
+    const hit = findHit(ctx.state.store.vectors.values(), screenPt, ctx.state.view, getCanvasCtx());
+    if (!hit) return;
+    openRadialMenu(ctx, hit, screenPt, e.pointerId, e.target);
   },
 
   onPointerMove(e, ctx) {
