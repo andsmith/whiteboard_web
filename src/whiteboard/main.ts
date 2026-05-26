@@ -49,10 +49,14 @@ function setupLobby(): void {
   const refresh = () => {
     const name = nameInput?.value.trim() ?? "";
     const hasName = name.length > 0;
-    if (btnEnter) btnEnter.disabled = !hasName || nameCommitted;
+    if (btnEnter) {
+      btnEnter.disabled = !hasName;
+      btnEnter.textContent = nameCommitted ? "Change" : "Enter";
+    }
     if (btnCreate) btnCreate.disabled = !nameCommitted || !hasName;
     if (btnJoin) btnJoin.disabled = !nameCommitted || !hasName;
     if (nameState) nameState.textContent = nameCommitted ? "✓ saved" : (hasName ? "press Enter to confirm" : "");
+    if (nameInput) nameInput.readOnly = nameCommitted;
   };
   refresh();
 
@@ -66,7 +70,16 @@ function setupLobby(): void {
       commitName();
     }
   });
-  btnEnter?.addEventListener("click", commitName);
+  btnEnter?.addEventListener("click", () => {
+    if (nameCommitted) {
+      nameCommitted = false;
+      refresh();
+      nameInput?.focus();
+      nameInput?.select();
+    } else {
+      commitName();
+    }
+  });
 
   function commitName(): void {
     const name = nameInput?.value.trim() ?? "";
