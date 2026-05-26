@@ -12,6 +12,7 @@ import { mountJoinDialog } from "./ui/join-dialog";
 import { RoomManager } from "./room-manager";
 import { generateRoomId, isValidRoomId } from "./room-id";
 import type { Vector } from "./vectors";
+import { scaleVector, getCenter } from "./vector-ops";
 
 const MY_ID = `local-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -285,18 +286,37 @@ window.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // Wheel zoom around cursor (only when no in-progress drawing)
+  // Wheel zoom around cursor. If a modify-tool drag is in progress, the
+  // dragged vector is inversely scaled in world coords so its screen size
+  // stays constant.
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
     const factor = Math.exp(-e.deltaY * 0.0015);
     const rect = canvas.getBoundingClientRect();
+    const oldZoom = state.view.zoom;
     state.view.zoomAt(
       { x: e.clientX - rect.left, y: e.clientY - rect.top },
-      state.view.zoom * factor,
+      oldZoom * factor,
     );
+    const inverseFactor = oldZoom / state.view.zoom;
+    if (state.dragLockedTargetId && inverseFactor !== 1) {
+      const current = state.store.vectors.get(state.dragLockedTargetId);
+      if (current) {
+        const scaled = scaleVector(current, inverseFactor, getCenter(current));
+        state.store.apply({ kind: "replace", before: current, after: scaled });
+      }
+    }
     bottomBar.update();
     invalidate();
   }, { passive: false });
+
+  // Clear hover state on mouse leave (modify tool).
+  canvas.addEventListener("pointerleave", () => {
+    if (state.hoverId !== null) {
+      state.hoverId = null;
+      invalidate();
+    }
+  });
 
   // Global keyboard for tools (polyline Enter/Escape)
   window.addEventListener("keydown", (e) => {

@@ -2,7 +2,7 @@ import type { AppState } from "../app-state";
 import type { Vector } from "../vectors";
 
 export type ToolId =
-  | "select" | "pan"
+  | "select" | "pan" | "modify"
   | "pencil" | "line" | "rect" | "circle" | "text" | "polyline";
 
 export interface ToolContext {

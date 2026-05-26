@@ -1,5 +1,6 @@
 import { panTool } from "./pan";
 import { selectTool } from "./select";
+import { modifyTool } from "./modify";
 import { pencilTool } from "./pencil";
 import { lineTool } from "./line";
 import { rectTool } from "./rect";
@@ -11,6 +12,7 @@ import type { Tool, ToolId } from "./tool";
 export const TOOLS: Record<ToolId, Tool> = {
   select: selectTool,
   pan: panTool,
+  modify: modifyTool,
   pencil: pencilTool,
   line: lineTool,
   rect: rectTool,
@@ -19,10 +21,9 @@ export const TOOLS: Record<ToolId, Tool> = {
   polyline: polylineTool,
 };
 
-// Navigation tools (top of left panel, separated from drawing tools)
-export const NAV_TOOL_ORDER: ToolId[] = ["select", "pan"];
+// Three navigation tools on top, separated from the drawing tools.
+export const NAV_TOOL_ORDER: ToolId[] = ["select", "pan", "modify"];
 
-// Drawing tools (3×2 grid below)
 export const DRAW_TOOL_ORDER: ToolId[] = [
   "pencil", "line",
   "rect", "circle",

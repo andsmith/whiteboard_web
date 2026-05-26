@@ -45,6 +45,13 @@ export class VectorStore {
     this.redoStack.length = 0;
   }
 
+  /** Record an op as undoable without applying it (caller has already
+   * mutated state directly, e.g. across many intermediate drag frames). */
+  recordOnly(op: Op): void {
+    this.undoStack.push(op);
+    this.redoStack.length = 0;
+  }
+
   undo(): Op | null {
     const op = this.undoStack.pop();
     if (!op) return null;
