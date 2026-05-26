@@ -3,7 +3,7 @@ import { createInitialState } from "./app-state";
 import { CanvasRenderer } from "./renderer";
 import { TOOLS } from "./tools/registry";
 import type { ToolContext } from "./tools/tool";
-import { mountTitleBar } from "./ui/title-bar";
+import { mountTitleBar, type TitleStatus } from "./ui/title-bar";
 import { mountToolsPanel } from "./ui/tools-panel";
 import { mountBottomBar } from "./ui/bottom-bar";
 import { mountParticipantsPanel } from "./ui/participants-panel";
@@ -28,7 +28,7 @@ window.addEventListener("DOMContentLoaded", () => {
     return raw && isValidRoomId(raw) ? raw : null;
   };
 
-  const computeStatus = (): string => {
+  const computeStatus = (): TitleStatus => {
     if (room.state.status === "idle" || room.state.status === "ended") return "Disconnected";
     if (room.state.status === "connecting") return "Connecting";
     if (room.isHost()) return "Host";
@@ -37,7 +37,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // ---------- UI mounts ----------
   const titleBar = mountTitleBar({
-    getStatus: computeStatus,
+    getTitle: () => ({ status: computeStatus(), roomId: room.state.roomId }),
     getParticipantCount: () => room.participantCount(),
     onToggleParticipants: () => {
       state.participantsExpanded = !state.participantsExpanded;

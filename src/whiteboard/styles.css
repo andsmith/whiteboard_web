@@ -37,6 +37,15 @@ html, body {
 #title-bar h1 {
   margin: 0; font-size: 0.95rem; font-weight: 500; color: var(--ink);
 }
+#title-bar h1 code.room-id {
+  font-family: ui-monospace, "SF Mono", "Menlo", "Consolas", "Liberation Mono", monospace;
+  font-size: 0.9rem;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+  color: var(--ink);
+}
 #participants-chip {
   position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
   background: transparent; border: 1px solid var(--panel-border);
@@ -55,7 +64,7 @@ html, body {
 /* Left panel — tools + colors */
 #tools-panel {
   position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-  display: flex; flex-direction: column; gap: 12px;
+  display: flex; flex-direction: column; gap: 38px;
   z-index: 2; pointer-events: none;
 }
 #tools-panel > * { pointer-events: auto; }
