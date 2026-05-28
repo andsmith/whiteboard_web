@@ -1,3 +1,7 @@
+/** Bump on every release so it's visible in the title bar.
+ * Used to verify which build the browser is actually serving. */
+export const APP_VERSION = "0.0.2";
+
 export type TitleStatus = "Host" | "Guest" | "View only" | "Connecting" | "Disconnected";
 
 export interface TitleInfo {
@@ -26,7 +30,7 @@ export function mountTitleBar(opts: {
     if (title) {
       const info = opts.getTitle();
       title.textContent = ""; // clear before rebuild
-      const lead = document.createTextNode("Whiteboard-Web");
+      const lead = document.createTextNode(`Whiteboard-Web Version ${APP_VERSION}`);
       title.appendChild(lead);
       if (info.roomId && (info.status === "Host" || info.status === "Guest" || info.status === "View only")) {
         title.appendChild(document.createTextNode(` — ${info.status} at: `));
