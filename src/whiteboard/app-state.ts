@@ -17,8 +17,15 @@ export type RadialIcon = "delete" | "rotate" | "scale";
 
 export interface RadialMenuState {
   pos: Point;             // screen-space position of cursor when opened
-  targetId: string;
+  targetId: string;       // "" for the select-tool's multi-target menus
   hoverIcon: RadialIcon | null;
+}
+
+export interface SelectionBoxState {
+  startScreen: Point;
+  endScreen: Point;
+  /** Vector ids whose rendered bbox intersects the in-progress box. */
+  candidates: Set<string>;
 }
 
 export interface AppState {
@@ -42,6 +49,11 @@ export interface AppState {
   /** While the user is mid-drag with the modify tool, wheel-zoom keeps
    * the dragged vector visually the same size (inverse-scale in world coords). */
   dragLockedTargetId: string | null;
+  /** Persistent set selected by the select tool — drawn in blue. */
+  selectedIds: Set<string>;
+  /** In-progress selection box; while non-null its `candidates` are
+   * highlighted green to show what will be selected on release. */
+  selectionBox: SelectionBoxState | null;
 }
 
 export function createInitialState(): AppState {
@@ -60,5 +72,7 @@ export function createInitialState(): AppState {
     hoverId: null,
     radialMenu: null,
     dragLockedTargetId: null,
+    selectedIds: new Set(),
+    selectionBox: null,
   };
 }

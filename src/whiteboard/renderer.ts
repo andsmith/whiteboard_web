@@ -70,8 +70,12 @@ export class CanvasRenderer {
 
     for (const v of this.state.store.vectors.values()) {
       const isDragging = this.state.dragLockedTargetId === v.id;
+      const isCandidate = this.state.selectionBox?.candidates.has(v.id) ?? false;
+      const isSelected = this.state.selectedIds.has(v.id);
       const isHovered = this.state.hoverId === v.id;
-      const override = isDragging ? DRAG_COLOR : (isHovered ? HOVER_COLOR : undefined);
+      let override: string | undefined;
+      if (isDragging || isSelected) override = DRAG_COLOR;
+      else if (isCandidate || isHovered) override = HOVER_COLOR;
       this.drawVector(v, { override });
     }
     if (this.state.inProgress) {
@@ -81,9 +85,32 @@ export class CanvasRenderer {
       this.drawVector(this.state.textEditing, { alpha: 1.0 });
       this.drawTextCursor(this.state.textEditing);
     }
+    if (this.state.selectionBox) {
+      this.drawSelectionBox();
+    }
     if (this.state.radialMenu) {
       this.drawRadialMenu();
     }
+  }
+
+  private drawSelectionBox(): void {
+    const box = this.state.selectionBox;
+    if (!box) return;
+    const ctx = this.ctx;
+    const x = Math.min(box.startScreen.x, box.endScreen.x);
+    const y = Math.min(box.startScreen.y, box.endScreen.y);
+    const w = Math.abs(box.endScreen.x - box.startScreen.x);
+    const h = Math.abs(box.endScreen.y - box.startScreen.y);
+    ctx.save();
+    ctx.fillStyle = "rgba(16, 128, 255, 0.08)";
+    ctx.strokeStyle = "#1080ff";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
   }
 
   private drawGrid(w: number, h: number): void {

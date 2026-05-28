@@ -142,6 +142,77 @@ export function hitTest(
   }
 }
 
+export interface Bbox { minX: number; minY: number; maxX: number; maxY: number; }
+
+/** Screen-space AABB of a vector as it would render now (accounting for rotation). */
+export function renderedBboxPx(
+  v: Vector,
+  view: BoardView,
+  ctx?: CanvasRenderingContext2D,
+): Bbox {
+  switch (v.kind) {
+    case "rect": {
+      const center = { x: (v.a.x + v.b.x) / 2, y: (v.a.y + v.b.y) / 2 };
+      const halfW = Math.abs(v.b.x - v.a.x) / 2;
+      const halfH = Math.abs(v.b.y - v.a.y) / 2;
+      const rot = v.rotation ?? 0;
+      const cos = Math.cos(rot), sin = Math.sin(rot);
+      const cornersWorld = [
+        { x: -halfW, y: -halfH }, { x:  halfW, y: -halfH },
+        { x:  halfW, y:  halfH }, { x: -halfW, y:  halfH },
+      ].map((p) => ({
+        x: center.x + p.x * cos - p.y * sin,
+        y: center.y + p.x * sin + p.y * cos,
+      }));
+      return aabbOf(cornersWorld.map((p) => view.worldToPixels(p)));
+    }
+    case "text": {
+      const px = Math.max(8, v.fontSize * view.zoom);
+      const lineHeight = px * 1.5;
+      const lines = v.text.split("\n");
+      let maxWidth = 0;
+      if (ctx) {
+        ctx.save();
+        ctx.font = `${px}px system-ui, -apple-system, sans-serif`;
+        for (const line of lines) maxWidth = Math.max(maxWidth, ctx.measureText(line).width);
+        ctx.restore();
+      } else {
+        for (const line of lines) maxWidth = Math.max(maxWidth, line.length * px * 0.6);
+      }
+      const posPx = view.worldToPixels(v.pos);
+      const rot = v.rotation ?? 0;
+      const cos = Math.cos(rot), sin = Math.sin(rot);
+      const local = [
+        { x: 0,        y: -px },
+        { x: maxWidth, y: -px },
+        { x: maxWidth, y: -px + lines.length * lineHeight },
+        { x: 0,        y: -px + lines.length * lineHeight },
+      ];
+      return aabbOf(local.map((p) => ({
+        x: posPx.x + p.x * cos - p.y * sin,
+        y: posPx.y + p.x * sin + p.y * cos,
+      })));
+    }
+    default:
+      return bboxPx(v, view, ctx);
+  }
+}
+
+function aabbOf(points: Point[]): Bbox {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { minX, minY, maxX, maxY };
+}
+
+export function bboxIntersects(a: Bbox, b: Bbox): boolean {
+  return !(a.maxX < b.minX || a.minX > b.maxX || a.maxY < b.minY || a.minY > b.maxY);
+}
+
 export function findHit(
   vectors: Iterable<Vector>,
   screenPt: Point,
