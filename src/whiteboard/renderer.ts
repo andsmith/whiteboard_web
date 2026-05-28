@@ -115,6 +115,13 @@ export class CanvasRenderer {
     if (this.state.inProgress) {
       this.drawVector(this.state.inProgress, { alpha: 0.7 });
     }
+    // Mid-placement duplicate previews — rendered with the same alpha as
+    // in-progress drawings so it's clear they aren't committed yet.
+    if (this.state.placingDuplicates) {
+      for (const v of this.state.placingDuplicates) {
+        this.drawVector(v, { alpha: 0.7 });
+      }
+    }
     if (this.state.textEditing) {
       this.drawVector(this.state.textEditing, { alpha: 1.0 });
       this.drawTextCursor(this.state.textEditing);
@@ -402,7 +409,7 @@ export class CanvasRenderer {
     if (!menu) return;
     const ctx = this.ctx;
     const positions = getRadialIconPositions(menu.pos);
-    for (const name of ["delete", "rotate", "scale"] as const) {
+    for (const name of ["rotate", "scale", "delete", "duplicate"] as const) {
       const pos = positions[name];
       const hovered = menu.hoverIcon === name;
       const r = hovered ? RADIAL_ICON_R_HOVER : RADIAL_ICON_R;
@@ -427,7 +434,7 @@ export class CanvasRenderer {
     }
   }
 
-  private drawRadialIcon(name: "delete" | "rotate" | "scale"): void {
+  private drawRadialIcon(name: "delete" | "rotate" | "scale" | "duplicate"): void {
     const ctx = this.ctx;
     switch (name) {
       case "delete": {
@@ -484,6 +491,31 @@ export class CanvasRenderer {
         ctx.beginPath();
         ctx.moveTo(1, 1); ctx.lineTo(4, 1); ctx.lineTo(1, 4); ctx.closePath();
         ctx.fill();
+        break;
+      }
+      case "duplicate": {
+        // Two overlapping page outlines — bottom layer drawn first, top layer
+        // offset up-left so it reads as "make a copy".
+        ctx.strokeStyle = "#0a7a3a";
+        ctx.fillStyle = "white";
+        ctx.lineWidth = 1.6;
+        ctx.lineJoin = "miter";
+        // Bottom rect.
+        ctx.beginPath();
+        ctx.rect(-2, -2, 10, 10);
+        ctx.fill();
+        ctx.stroke();
+        // Top rect (offset up-left).
+        ctx.beginPath();
+        ctx.rect(-7, -7, 10, 10);
+        ctx.fill();
+        ctx.stroke();
+        // Plus sign centered in the top rect at (-2, -2).
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(-2, -5); ctx.lineTo(-2, 1);
+        ctx.moveTo(-5, -2); ctx.lineTo(1, -2);
+        ctx.stroke();
         break;
       }
     }

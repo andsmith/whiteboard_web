@@ -15,7 +15,7 @@ export const COLORS = [
 
 export type ColorHex = (typeof COLORS)[number];
 
-export type RadialIcon = "delete" | "rotate" | "scale";
+export type RadialIcon = "delete" | "rotate" | "scale" | "duplicate";
 
 export interface RadialMenuState {
   pos: Point;             // screen-space position of cursor when opened
@@ -61,6 +61,10 @@ export interface AppState {
   /** While the user is mid-drag with the modify tool, wheel-zoom keeps
    * the dragged vector visually the same size (inverse-scale in world coords). */
   dragLockedTargetId: string | null;
+  /** Vectors currently being placed after a duplicate action. They follow the
+   * mouse until the next left-click (commits) or Escape (discards). Not in the
+   * authoritative store yet — rendered as a preview overlay. */
+  placingDuplicates: Vector[] | null;
   /** Persistent set selected by the select tool — drawn in blue. */
   selectedIds: Set<string>;
   /** In-progress selection box; while non-null its `candidates` are
@@ -101,6 +105,7 @@ export function createInitialState(): AppState {
     hoverAnchorId: null,
     radialMenu: null,
     dragLockedTargetId: null,
+    placingDuplicates: null,
     selectedIds: new Set(),
     selectionBox: null,
     anchors: new Map(),

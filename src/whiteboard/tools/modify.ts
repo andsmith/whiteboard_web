@@ -1,11 +1,11 @@
 import type { Tool, ToolContext } from "./tool";
 import { eventCanvasPoint } from "./tool";
 import { findHit } from "../hit-test";
-import { translateVector, scaleVector, rotateVector, getCenter } from "../vector-ops";
+import { translateVector, scaleVector, rotateVector, getCenter, duplicateVector } from "../vector-ops";
 import type { Vector } from "../vectors";
 import { snap, snapAngle, type Point } from "../view";
 
-type Mode = "idle" | "moving" | "menuOpen" | "rotating" | "scaling";
+type Mode = "idle" | "moving" | "menuOpen" | "rotating" | "scaling" | "placingDuplicate";
 
 let mode: Mode = "idle";
 let targetId: string | null = null;
@@ -17,27 +17,31 @@ let menuPos: Point | null = null;
 let rotateStartAngle = 0;
 let scaleStartY = 0;
 
+/** Mid-placement duplicate state. The vectors are NOT in the store; they
+ * render via state.placingDuplicates. lastDragWorld is the prior cursor
+ * world-position so we can translate by deltas as the mouse moves. */
+let dupVectors: Vector[] = [];
+let lastDragWorld: Point | null = null;
+
 const RADIAL_RADIUS = 56;
 const RADIAL_HIT_RADIUS = 24;
 
-export function getRadialIconPositions(center: Point): Record<"delete" | "rotate" | "scale", Point> {
-  // 12 o'clock = rotate, 4 o'clock = scale, 8 o'clock = delete (120° apart)
+const RADIAL_NAMES = ["rotate", "scale", "delete", "duplicate"] as const;
+export type RadialIconName = (typeof RADIAL_NAMES)[number];
+
+export function getRadialIconPositions(center: Point): Record<RadialIconName, Point> {
+  // Four cardinal positions: rotate N, scale E, delete S, duplicate W.
   return {
-    rotate: { x: center.x, y: center.y - RADIAL_RADIUS },
-    scale: {
-      x: center.x + RADIAL_RADIUS * Math.cos(Math.PI / 6),
-      y: center.y + RADIAL_RADIUS * Math.sin(Math.PI / 6),
-    },
-    delete: {
-      x: center.x - RADIAL_RADIUS * Math.cos(Math.PI / 6),
-      y: center.y + RADIAL_RADIUS * Math.sin(Math.PI / 6),
-    },
+    rotate:    { x: center.x,                  y: center.y - RADIAL_RADIUS },
+    scale:     { x: center.x + RADIAL_RADIUS,  y: center.y                  },
+    delete:    { x: center.x,                  y: center.y + RADIAL_RADIUS },
+    duplicate: { x: center.x - RADIAL_RADIUS,  y: center.y                  },
   };
 }
 
-function hitTestIcon(menuPos: Point, cursor: Point): "delete" | "rotate" | "scale" | null {
+function hitTestIcon(menuPos: Point, cursor: Point): RadialIconName | null {
   const positions = getRadialIconPositions(menuPos);
-  for (const name of ["delete", "rotate", "scale"] as const) {
+  for (const name of RADIAL_NAMES) {
     const p = positions[name];
     if (Math.hypot(cursor.x - p.x, cursor.y - p.y) <= RADIAL_HIT_RADIUS) return name;
   }
@@ -55,9 +59,30 @@ function reset(ctx: ToolContext): void {
   original = null;
   dragStartWorld = null;
   menuPos = null;
+  dupVectors = [];
+  lastDragWorld = null;
   ctx.state.radialMenu = null;
   ctx.state.dragLockedTargetId = null;
+  ctx.state.placingDuplicates = null;
   ctx.invalidate();
+}
+
+function startPlacingDuplicate(ctx: ToolContext, source: Vector, screenPt: Point): void {
+  const copy = duplicateVector(source, ctx.getMyId());
+  dupVectors = [copy];
+  lastDragWorld = ctx.state.view.pixelsToWorld(screenPt);
+  ctx.state.placingDuplicates = dupVectors.slice();
+  mode = "placingDuplicate";
+  ctx.invalidate();
+}
+
+function commitPlacingDuplicate(ctx: ToolContext): void {
+  if (dupVectors.length === 0) { reset(ctx); return; }
+  const ops = dupVectors.map((v) => ({ kind: "add" as const, vector: v }));
+  ctx.state.store.applyAndRecord(ops.length === 1
+    ? ops[0]!
+    : { kind: "batch", ops });
+  reset(ctx);
 }
 
 function openRadialMenu(ctx: ToolContext, hit: Vector, screenPt: Point, pointerId: number, target: EventTarget | null): void {
@@ -114,6 +139,13 @@ export const modifyTool: Tool = {
     if (e.button !== 0) return;
     const screenPt = eventCanvasPoint(e);
 
+    // Placing-duplicate mode: left-click anywhere commits the placement.
+    if (mode === "placingDuplicate") {
+      e.preventDefault();
+      commitPlacingDuplicate(ctx);
+      return;
+    }
+
     // If in a continuation mode, a click commits.
     if (mode === "rotating" || mode === "scaling") {
       commitTransform(ctx);
@@ -147,6 +179,21 @@ export const modifyTool: Tool = {
 
   onPointerMove(e, ctx) {
     const screenPt = eventCanvasPoint(e);
+
+    if (mode === "placingDuplicate") {
+      if (!lastDragWorld) return;
+      const worldNow = ctx.state.view.pixelsToWorld(screenPt);
+      const targetClick = e.shiftKey ? snap(worldNow, true) : worldNow;
+      const dx = targetClick.x - lastDragWorld.x;
+      const dy = targetClick.y - lastDragWorld.y;
+      lastDragWorld = targetClick;
+      for (let i = 0; i < dupVectors.length; i++) {
+        dupVectors[i] = translateVector(dupVectors[i]!, dx, dy);
+      }
+      ctx.state.placingDuplicates = dupVectors.slice();
+      ctx.invalidate();
+      return;
+    }
 
     if (mode === "idle") {
       const hit = findHit(ctx.state.store.vectors.values(), screenPt, ctx.state.view, getCanvasCtx());
@@ -219,7 +266,8 @@ export const modifyTool: Tool = {
       return;
     }
     if (mode === "menuOpen" && menuPos) {
-      const icon = hitTestIcon(menuPos, eventCanvasPoint(e));
+      const screenPt = eventCanvasPoint(e);
+      const icon = hitTestIcon(menuPos, screenPt);
       if (icon === "delete" && targetId) {
         const v = ctx.state.store.vectors.get(targetId);
         if (v) ctx.state.store.applyAndRecord({ kind: "delete", vector: v });
@@ -228,13 +276,20 @@ export const modifyTool: Tool = {
         const v = ctx.state.store.vectors.get(targetId);
         if (v) {
           ctx.state.radialMenu = null;
-          startRotate(ctx, v, eventCanvasPoint(e));
+          startRotate(ctx, v, screenPt);
         } else reset(ctx);
       } else if (icon === "scale" && targetId) {
         const v = ctx.state.store.vectors.get(targetId);
         if (v) {
           ctx.state.radialMenu = null;
-          startScale(ctx, v, eventCanvasPoint(e));
+          startScale(ctx, v, screenPt);
+        } else reset(ctx);
+      } else if (icon === "duplicate" && targetId) {
+        const v = ctx.state.store.vectors.get(targetId);
+        if (v) {
+          ctx.state.radialMenu = null;
+          (e.target as Element | null)?.releasePointerCapture?.(e.pointerId);
+          startPlacingDuplicate(ctx, v, screenPt);
         } else reset(ctx);
       } else {
         reset(ctx);
@@ -255,6 +310,10 @@ export const modifyTool: Tool = {
         reset(ctx);
         e.preventDefault();
       } else if (mode === "menuOpen") {
+        reset(ctx);
+        e.preventDefault();
+      } else if (mode === "placingDuplicate") {
+        // Discard the duplicates — they were never added to the store.
         reset(ctx);
         e.preventDefault();
       }
@@ -280,6 +339,7 @@ export const modifyTool: Tool = {
         if (current) ctx.state.store.apply({ kind: "replace", before: current, after: original });
       }
     }
+    // placingDuplicate: silently discard the unplaced copies.
     ctx.state.hoverId = null;
     reset(ctx);
   },

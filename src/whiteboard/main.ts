@@ -848,7 +848,9 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
     // Anchor hit-test: clicking an anchor navigates, regardless of tool.
-    if (e.button === 0) {
+    // Exception: while placing a duplicate the click must commit placement,
+    // not navigate. The tool consumes the click in that case.
+    if (e.button === 0 && !state.placingDuplicates) {
       const id = anchorAt(eventCanvasPos(e));
       if (id) {
         e.preventDefault();
@@ -868,11 +870,15 @@ window.addEventListener("DOMContentLoaded", () => {
       return;
     }
     // Hover over an anchor → show name tooltip (and switch cursor).
-    const hoverId = anchorAt(eventCanvasPos(e));
-    if (hoverId !== state.hoverAnchorId) {
-      state.hoverAnchorId = hoverId;
-      canvas.style.cursor = hoverId ? "pointer" : TOOLS[state.currentTool].cursor;
-      invalidate();
+    // Suppress while placing a duplicate so the tooltip doesn't obscure the
+    // preview, and so the cursor stays consistent.
+    if (!state.placingDuplicates) {
+      const hoverId = anchorAt(eventCanvasPos(e));
+      if (hoverId !== state.hoverAnchorId) {
+        state.hoverAnchorId = hoverId;
+        canvas.style.cursor = hoverId ? "pointer" : TOOLS[state.currentTool].cursor;
+        invalidate();
+      }
     }
     TOOLS[state.currentTool].onPointerMove?.(e, toolCtx);
   });

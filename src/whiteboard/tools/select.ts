@@ -3,11 +3,11 @@ import { eventCanvasPoint } from "./tool";
 import type { Vector } from "../vectors";
 import { snap, snapAngle, type Point } from "../view";
 import { renderedBboxPx, bboxIntersects, findHit, type Bbox } from "../hit-test";
-import { translateVector, scaleVector, rotateVector } from "../vector-ops";
+import { translateVector, scaleVector, rotateVector, duplicateVector } from "../vector-ops";
 import type { Op } from "../vector-store";
-import { getRadialIconPositions } from "./modify";
+import { getRadialIconPositions, type RadialIconName } from "./modify";
 
-type Mode = "idle" | "boxing" | "moving" | "menuOpen" | "rotating" | "scaling";
+type Mode = "idle" | "boxing" | "moving" | "menuOpen" | "rotating" | "scaling" | "placingDuplicate";
 
 let mode: Mode = "idle";
 let originals: Map<string, Vector> = new Map();
@@ -16,6 +16,10 @@ let anchorWorld: Point | null = null;
 let menuPos: Point | null = null;
 let rotateStartAngle = 0;
 let scaleStartY = 0;
+
+/** Mid-placement duplicate state (mirrors the same in modify.ts but kept per-tool). */
+let dupVectors: Vector[] = [];
+let lastDragWorld: Point | null = null;
 
 const RADIAL_HIT_RADIUS = 24;
 
@@ -87,14 +91,49 @@ function openRadial(ctx: ToolContext, screenPt: Point, pointerId: number, target
   ctx.invalidate();
 }
 
-type RadialIcon = "delete" | "rotate" | "scale";
-function hitTestIcon(menuPos: Point, cursor: Point): RadialIcon | null {
+function hitTestIcon(menuPos: Point, cursor: Point): RadialIconName | null {
   const positions = getRadialIconPositions(menuPos);
-  for (const name of ["delete", "rotate", "scale"] as const) {
+  for (const name of ["rotate", "scale", "delete", "duplicate"] as const) {
     const p = positions[name];
     if (Math.hypot(cursor.x - p.x, cursor.y - p.y) <= RADIAL_HIT_RADIUS) return name;
   }
   return null;
+}
+
+function startPlacingDuplicateSelection(ctx: ToolContext, screenPt: Point): void {
+  const author = ctx.getMyId();
+  const ids = Array.from(ctx.state.selectedIds);
+  dupVectors = [];
+  for (const id of ids) {
+    const v = ctx.state.store.vectors.get(id);
+    if (v) dupVectors.push(duplicateVector(v, author));
+  }
+  if (dupVectors.length === 0) { mode = "idle"; ctx.invalidate(); return; }
+  lastDragWorld = ctx.state.view.pixelsToWorld(screenPt);
+  ctx.state.placingDuplicates = dupVectors.slice();
+  mode = "placingDuplicate";
+  ctx.invalidate();
+}
+
+function commitPlacingDuplicate(ctx: ToolContext): void {
+  if (dupVectors.length === 0) { mode = "idle"; ctx.state.placingDuplicates = null; ctx.invalidate(); return; }
+  const ops: Op[] = dupVectors.map((v) => ({ kind: "add", vector: v }));
+  ctx.state.store.applyAndRecord(ops.length === 1 ? ops[0]! : { kind: "batch", ops });
+  // Select the freshly-placed copies so the user can immediately keep editing them.
+  ctx.state.selectedIds = new Set(dupVectors.map((v) => v.id));
+  dupVectors = [];
+  lastDragWorld = null;
+  ctx.state.placingDuplicates = null;
+  mode = "idle";
+  ctx.invalidate();
+}
+
+function cancelPlacingDuplicate(ctx: ToolContext): void {
+  dupVectors = [];
+  lastDragWorld = null;
+  ctx.state.placingDuplicates = null;
+  mode = "idle";
+  ctx.invalidate();
 }
 
 function deleteSelection(ctx: ToolContext): void {
@@ -114,6 +153,13 @@ export const selectTool: Tool = {
   onPointerDown(e, ctx) {
     if (e.button !== 0) return;
     const screenPt = eventCanvasPoint(e);
+
+    // Placing-duplicate: left-click anywhere commits the placement.
+    if (mode === "placingDuplicate") {
+      e.preventDefault();
+      commitPlacingDuplicate(ctx);
+      return;
+    }
 
     // Click to commit an in-progress rotate or scale.
     if (mode === "rotating" || mode === "scaling") {
@@ -165,6 +211,21 @@ export const selectTool: Tool = {
 
   onPointerMove(e, ctx) {
     const screenPt = eventCanvasPoint(e);
+
+    if (mode === "placingDuplicate") {
+      if (!lastDragWorld) return;
+      const worldNow = ctx.state.view.pixelsToWorld(screenPt);
+      const targetClick = e.shiftKey ? snap(worldNow, true) : worldNow;
+      const dx = targetClick.x - lastDragWorld.x;
+      const dy = targetClick.y - lastDragWorld.y;
+      lastDragWorld = targetClick;
+      for (let i = 0; i < dupVectors.length; i++) {
+        dupVectors[i] = translateVector(dupVectors[i]!, dx, dy);
+      }
+      ctx.state.placingDuplicates = dupVectors.slice();
+      ctx.invalidate();
+      return;
+    }
 
     if (mode === "boxing" && ctx.state.selectionBox) {
       ctx.state.selectionBox.endScreen = screenPt;
@@ -245,7 +306,8 @@ export const selectTool: Tool = {
     }
 
     if (mode === "menuOpen" && menuPos) {
-      const icon = hitTestIcon(menuPos, eventCanvasPoint(e));
+      const screenPt = eventCanvasPoint(e);
+      const icon = hitTestIcon(menuPos, screenPt);
       ctx.state.radialMenu = null;
       if (icon === "delete") {
         deleteSelection(ctx);
@@ -253,15 +315,18 @@ export const selectTool: Tool = {
         ctx.invalidate();
       } else if (icon === "rotate" && anchorWorld) {
         captureOriginals(ctx);
-        const cw = ctx.state.view.pixelsToWorld(eventCanvasPoint(e));
+        const cw = ctx.state.view.pixelsToWorld(screenPt);
         rotateStartAngle = Math.atan2(cw.y - anchorWorld.y, cw.x - anchorWorld.x);
         mode = "rotating";
         ctx.invalidate();
       } else if (icon === "scale") {
         captureOriginals(ctx);
-        scaleStartY = eventCanvasPoint(e).y;
+        scaleStartY = screenPt.y;
         mode = "scaling";
         ctx.invalidate();
+      } else if (icon === "duplicate") {
+        (e.target as Element | null)?.releasePointerCapture?.(e.pointerId);
+        startPlacingDuplicateSelection(ctx, screenPt);
       } else {
         mode = "idle";
         ctx.invalidate();
@@ -281,6 +346,9 @@ export const selectTool: Tool = {
         ctx.state.radialMenu = null;
         mode = "idle";
         ctx.invalidate();
+        e.preventDefault();
+      } else if (mode === "placingDuplicate") {
+        cancelPlacingDuplicate(ctx);
         e.preventDefault();
       } else if (ctx.state.selectedIds.size > 0) {
         ctx.state.selectedIds.clear();
@@ -303,6 +371,9 @@ export const selectTool: Tool = {
     dragStartWorld = null;
     anchorWorld = null;
     menuPos = null;
+    dupVectors = [];
+    lastDragWorld = null;
+    ctx.state.placingDuplicates = null;
     ctx.state.selectionBox = null;
     ctx.state.selectedIds.clear();
     ctx.state.radialMenu = null;

@@ -1,5 +1,14 @@
 import type { Vector } from "./vectors";
+import { newVectorId } from "./vectors";
 import type { Point } from "./view";
+
+/** Deep-copy a vector with a fresh id, fresh createdAt, and a new author.
+ * Geometry is shared safely: we route through translateVector(0,0) which
+ * already clones the point arrays. */
+export function duplicateVector(v: Vector, author: string): Vector {
+  const cloned = translateVector(v, 0, 0);
+  return { ...cloned, id: newVectorId(), createdAt: Date.now(), author };
+}
 
 export function translateVector(v: Vector, dx: number, dy: number): Vector {
   const t = (p: Point): Point => ({ x: p.x + dx, y: p.y + dy });
