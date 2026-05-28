@@ -67,12 +67,15 @@ export function mountParticipantsPanel(opts: {
         li.appendChild(name);
 
         if (p.isYou) li.appendChild(tag("you", "you"));
-        if (p.isHost) li.appendChild(tag("host", "host"));
 
-        if (!p.isYou && !p.isHost) {
+        if (p.isHost) {
+          li.appendChild(tag("host", "host"));
+        } else {
           const perm = state.perms.get(p.peerId) ?? "edit";
-          if (perm === "view") li.appendChild(tag("view", "view only"));
-          if (opts.isHost() && opts.getPeerDirty().get(p.peerId)) {
+          const roleLabel = perm === "view" ? "guest — viewing" : "guest — editing";
+          const roleClass = perm === "view" ? "view" : "edit";
+          li.appendChild(tag(roleClass, roleLabel));
+          if (opts.isHost() && !p.isYou && opts.getPeerDirty().get(p.peerId)) {
             li.appendChild(tag("dirty", "pending"));
           }
         }
@@ -81,7 +84,7 @@ export function mountParticipantsPanel(opts: {
           const perm = state.perms.get(p.peerId) ?? "edit";
           const permBtn = document.createElement("button");
           permBtn.className = "p-action";
-          permBtn.textContent = perm === "edit" ? "→ View only" : "→ Allow edit";
+          permBtn.textContent = perm === "edit" ? "Make viewing-only" : "Allow editing";
           permBtn.addEventListener("click", () => {
             opts.onPermChange(p.peerId, perm === "edit" ? "view" : "edit");
           });

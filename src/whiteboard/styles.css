@@ -258,6 +258,7 @@ html, body {
 }
 .tag-you { background: #2a6; }
 .tag-view { background: #999; }
+.tag-edit { background: #4c80b3; }
 .tag-dirty { background: #c70; }
 .p-action {
   font-size: 0.75rem; padding: 2px 8px;

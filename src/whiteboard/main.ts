@@ -67,7 +67,7 @@ window.addEventListener("DOMContentLoaded", () => {
     if (room.state.status === "idle" || room.state.status === "ended") return "Disconnected";
     if (room.state.status === "connecting") return "Connecting";
     if (room.isHost()) return "Host";
-    return room.myPerm() === "view" ? "View only" : "Guest";
+    return room.myPerm() === "view" ? "Guest - Viewing" : "Guest - Editing";
   };
 
   const trashMode = (): TrashMode => {

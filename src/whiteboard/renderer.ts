@@ -76,10 +76,12 @@ export class CanvasRenderer {
     if (this.state.showGrid) this.drawGrid(w, h);
 
     // Compute the active preview overlay (host side) so we know which vector
-    // IDs to skip-then-redraw with the pending style.
+    // IDs to skip-then-redraw with the pending style. The host-preview cue
+    // (dashed/alpha) is the ONLY surface that uses dashed rendering — local
+    // pending ops on a guest's own device render normally so the user sees
+    // their work the way it will look once committed.
     const previewIds = this.activePreviewIds();
     const previewMap = previewIds ? this.buildPreviewMap() : null;
-    const pendingIds = this.localPendingIds();
 
     for (const v of this.state.store.vectors.values()) {
       const isDragging = this.state.dragLockedTargetId === v.id;
@@ -96,12 +98,6 @@ export class CanvasRenderer {
         const pv = previewMap.get(v.id);
         if (pv) this.drawVector(pv, { override, alpha: PENDING_ALPHA, dash: PENDING_DASH });
         continue; // skip the actual vector; preview replaces it visually
-      }
-      // Submitter-side pending visualization: anything affected by pendingOps
-      // gets the same dashed/alpha cue.
-      if (pendingIds.has(v.id)) {
-        this.drawVector(v, { override, alpha: PENDING_ALPHA, dash: PENDING_DASH });
-        continue;
       }
       this.drawVector(v, { override });
     }
@@ -165,14 +161,6 @@ export class CanvasRenderer {
     const map = new Map<string, Vector>(this.state.store.vectors);
     for (const op of submission.ops) applyOpsTo(map, op);
     return map;
-  }
-
-  private localPendingIds(): Set<string> {
-    // Only meaningful for view-only users. For host / edit guests pendingOps
-    // is always empty, so the set comes out empty too.
-    const ids = new Set<string>();
-    for (const op of this.state.pendingOps) opAffectedIds(op, ids);
-    return ids;
   }
 
   private drawAnchor(a: Anchor): void {
