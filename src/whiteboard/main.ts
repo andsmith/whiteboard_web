@@ -949,11 +949,31 @@ window.addEventListener("DOMContentLoaded", () => {
     if (dirty) invalidate();
   });
 
-  // Global keyboard for tools (polyline Enter/Escape)
+  // Global keyboard for tools (polyline Enter/Escape) + a tool-independent
+  // Delete/Backspace that wipes the current selection. Selection persists
+  // across tool switches, so this handler lets the user select with the
+  // select tool then delete from any other tool.
   window.addEventListener("keydown", (e) => {
     // Ignore when typing in input fields
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+
+    if ((e.key === "Delete" || e.key === "Backspace") && state.selectedIds.size > 0) {
+      const ops: Op[] = [];
+      for (const id of state.selectedIds) {
+        const v = state.store.vectors.get(id);
+        if (v) ops.push({ kind: "delete", vector: v });
+      }
+      if (ops.length > 0) {
+        state.store.applyAndRecord(ops.length === 1 ? ops[0]! : { kind: "batch", ops });
+      }
+      state.selectedIds.clear();
+      bottomBar.update();
+      invalidate();
+      e.preventDefault();
+      return;
+    }
+
     TOOLS[state.currentTool].onKeyDown?.(e, toolCtx);
   });
 

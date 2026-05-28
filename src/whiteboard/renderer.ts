@@ -475,8 +475,11 @@ export class CanvasRenderer {
       case "scale": {
         ctx.strokeStyle = "#202020";
         ctx.lineWidth = 1.4;
-        ctx.strokeRect(-10, -10, 9, 9);
-        ctx.strokeRect(-1, -1, 11, 11);
+        // Small square (top-left): 7×7, bottom-right corner at (-1,-1).
+        // Large square (bottom-right): 13×13, top-left corner at (-1,-1).
+        // Shared corner keeps the arrow geometry below unchanged.
+        ctx.strokeRect(-8, -8, 7, 7);
+        ctx.strokeRect(-1, -1, 13, 13);
         // double-headed arrow from inner corner of small square (1,1)
         // to its corresponding corner in the big square (-1,-1)
         ctx.beginPath();

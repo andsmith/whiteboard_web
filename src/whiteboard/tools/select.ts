@@ -375,7 +375,9 @@ export const selectTool: Tool = {
     lastDragWorld = null;
     ctx.state.placingDuplicates = null;
     ctx.state.selectionBox = null;
-    ctx.state.selectedIds.clear();
+    // NOTE: do NOT clear selectedIds here. Selection persists across tool
+    // switches so the global Delete/Backspace handler in main.ts can act on
+    // it from any tool. Press Escape inside the select tool to clear.
     ctx.state.radialMenu = null;
     ctx.invalidate();
   },
