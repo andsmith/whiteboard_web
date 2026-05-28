@@ -22,6 +22,7 @@ export function translateVector(v: Vector, dx: number, dy: number): Vector {
     case "circle":
       return { ...v, center: t(v.center) };
     case "text":
+    case "latex":
       return { ...v, pos: t(v.pos) };
   }
 }
@@ -41,6 +42,7 @@ export function scaleVector(v: Vector, factor: number, anchor: Point): Vector {
     case "circle":
       return { ...v, center: s(v.center), radius: v.radius * factor, thickness: v.thickness * factor };
     case "text":
+    case "latex":
       return { ...v, pos: s(v.pos), fontSize: v.fontSize * factor };
   }
 }
@@ -78,8 +80,9 @@ export function rotateVector(v: Vector, angleRad: number, center: Point): Vector
     }
     case "circle":
       return { ...v, center: r(v.center) };
-    case "text": {
-      // Translate the text's anchor point and accumulate rotation.
+    case "text":
+    case "latex": {
+      // Translate the anchor point and accumulate rotation.
       return { ...v, pos: r(v.pos), rotation: (v.rotation ?? 0) + angleRad };
     }
   }
@@ -100,6 +103,7 @@ export function getCenter(v: Vector): Point {
     case "circle":
       return { ...v.center };
     case "text":
+    case "latex":
       return { x: v.pos.x, y: v.pos.y - v.fontSize / 2 };
   }
 }

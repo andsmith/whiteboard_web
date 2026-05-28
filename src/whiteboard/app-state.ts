@@ -1,7 +1,7 @@
 import { BoardView } from "./view";
 import { VectorStore, type Op } from "./vector-store";
 import type { ToolId } from "./tools/tool";
-import type { TextVector, Vector } from "./vectors";
+import type { TextVector, LatexVector, Vector } from "./vectors";
 import type { Point } from "./view";
 import type { Anchor } from "./anchors";
 import type { Submission } from "./submissions";
@@ -15,7 +15,7 @@ export const COLORS = [
 
 export type ColorHex = (typeof COLORS)[number];
 
-export type RadialIcon = "delete" | "rotate" | "scale" | "duplicate";
+export type RadialIcon = "delete" | "rotate" | "scale" | "duplicate" | "edit";
 
 export interface RadialMenuState {
   pos: Point;             // screen-space position of cursor when opened
@@ -52,6 +52,12 @@ export interface AppState {
   inProgress: Vector | null;
   /** Active text-editing target — typing keys appends/edits this vector. */
   textEditing: TextVector | null;
+  /** Active LaTeX-editing target — bottom-bar input writes to this vector. */
+  latexEditing: LatexVector | null;
+  /** If the current edit session was opened via the "edit" radial action,
+   * this is the original vector that was removed from the store. On cancel
+   * we re-add it so no work is lost. */
+  editingOriginal: Vector | null;
   /** Vector currently moused over by the modify tool. */
   hoverId: string | null;
   /** Anchor currently moused over (for the on-canvas name tooltip). */
@@ -101,6 +107,8 @@ export function createInitialState(): AppState {
     store: new VectorStore(),
     inProgress: null,
     textEditing: null,
+    latexEditing: null,
+    editingOriginal: null,
     hoverId: null,
     hoverAnchorId: null,
     radialMenu: null,

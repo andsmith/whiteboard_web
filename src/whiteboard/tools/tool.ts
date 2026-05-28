@@ -3,13 +3,17 @@ import type { Vector } from "../vectors";
 
 export type ToolId =
   | "select" | "pan" | "modify"
-  | "pencil" | "line" | "rect" | "circle" | "text" | "polyline";
+  | "pencil" | "line" | "rect" | "circle" | "text" | "polyline" | "latex";
 
 export interface ToolContext {
   state: AppState;
   invalidate: () => void;
   getMyId: () => string;
   commitVector: (v: Vector) => void;
+  /** Switch the active tool. Calls the previous tool's onDeselect, updates
+   * state.currentTool, and refreshes the toolbar / canvas cursor. Used by
+   * the radial "edit" action to jump into the text or latex tool. */
+  switchTool: (t: ToolId) => void;
 }
 
 export interface Tool {

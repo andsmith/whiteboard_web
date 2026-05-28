@@ -11,7 +11,7 @@
     <div id="whiteboard-app">
 
       <div id="title-bar">
-        <h1 id="title-text">Whiteboard-Web Version 0.0.6 (Disconnected)</h1>
+        <h1 id="title-text">Whiteboard-Web Version 0.0.7 (Disconnected)</h1>
         <div id="title-chips">
           <button id="debug-chip" type="button" title="Toggle debug window">Debug</button>
           <button id="anchors-chip" type="button" title="Toggle anchors">Anchors (0)</button>
@@ -61,6 +61,12 @@
             </div>
             <ul id="debug-list"></ul>
           </div>
+        </div>
+
+        <div id="latex-input-bar" style="display:none">
+          <span class="latex-input-label">LaTeX:</span>
+          <textarea id="latex-input-textarea" rows="1" autocomplete="off" spellcheck="false" placeholder="e.g. \frac{1}{2}"></textarea>
+          <span class="latex-input-hint">Enter: newline · Shift+Enter: commit · Esc: cancel</span>
         </div>
 
         <div id="submit-bar" class="submit-bar" style="display:none"></div>

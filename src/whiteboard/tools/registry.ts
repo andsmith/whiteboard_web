@@ -7,6 +7,7 @@ import { rectTool } from "./rect";
 import { circleTool } from "./circle";
 import { textTool } from "./text";
 import { polylineTool } from "./polyline";
+import { latexTool } from "./latex";
 import type { Tool, ToolId, ActionDef, ActionId } from "./tool";
 
 export const TOOLS: Record<ToolId, Tool> = {
@@ -19,6 +20,7 @@ export const TOOLS: Record<ToolId, Tool> = {
   circle: circleTool,
   text: textTool,
   polyline: polylineTool,
+  latex: latexTool,
 };
 
 // Three navigation tools on top, separated from the drawing tools.
@@ -27,7 +29,8 @@ export const NAV_TOOL_ORDER: ToolId[] = ["select", "pan", "modify"];
 export const DRAW_TOOL_ORDER: ToolId[] = [
   "pencil", "line",
   "rect", "circle",
-  "text", "polyline",
+  "text", "latex",
+  "polyline",
 ];
 
 /** Action buttons in the toolbar — they don't become the active tool.

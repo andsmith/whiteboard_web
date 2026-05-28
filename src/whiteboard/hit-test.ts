@@ -139,6 +139,30 @@ export function hitTest(
         local.y >= minY - padY && local.y <= maxY + padY
       );
     }
+    case "latex": {
+      // Approximate hit-test: rotate into the vector's local frame, test against
+      // a rectangle estimated from the rendered image dimensions (or a coarse
+      // fontSize-based fallback if the image isn't cached yet).
+      const posPx = view.worldToPixels(v.pos);
+      const rot = v.rotation ?? 0;
+      const cos = Math.cos(-rot), sin = Math.sin(-rot);
+      const dx = screenPt.x - posPx.x;
+      const dy = screenPt.y - posPx.y;
+      const local: Point = { x: dx * cos - dy * sin, y: dx * sin + dy * cos };
+      const px = Math.max(8, v.fontSize * view.zoom);
+      const lines = Math.max(1, v.text.split("\n").length);
+      // Coarse rect approximating the rendered block (matches the placeholder).
+      const w = px * Math.max(2, v.text.length * 0.5);
+      const h = px * 1.3 * lines;
+      const minX = 0, maxX = w;
+      const minY = -h, maxY = 0;
+      const padX = Math.max(0, (MIN_BBOX_PX - (maxX - minX)) / 2);
+      const padY = Math.max(0, (MIN_BBOX_PX - (maxY - minY)) / 2);
+      return (
+        local.x >= minX - padX && local.x <= maxX + padX &&
+        local.y >= minY - padY && local.y <= maxY + padY
+      );
+    }
   }
 }
 

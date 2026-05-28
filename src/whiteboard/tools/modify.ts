@@ -26,17 +26,22 @@ let lastDragWorld: Point | null = null;
 const RADIAL_RADIUS = 56;
 const RADIAL_HIT_RADIUS = 24;
 
-const RADIAL_NAMES = ["rotate", "scale", "delete", "duplicate"] as const;
+/** Five icons evenly spaced 72° apart around the cursor, starting at top
+ * (rotate) and going clockwise. The order here defines the angular order. */
+export const RADIAL_NAMES = ["rotate", "scale", "delete", "duplicate", "edit"] as const;
 export type RadialIconName = (typeof RADIAL_NAMES)[number];
 
 export function getRadialIconPositions(center: Point): Record<RadialIconName, Point> {
-  // Four cardinal positions: rotate N, scale E, delete S, duplicate W.
-  return {
-    rotate:    { x: center.x,                  y: center.y - RADIAL_RADIUS },
-    scale:     { x: center.x + RADIAL_RADIUS,  y: center.y                  },
-    delete:    { x: center.x,                  y: center.y + RADIAL_RADIUS },
-    duplicate: { x: center.x - RADIAL_RADIUS,  y: center.y                  },
-  };
+  const out: Record<string, Point> = {};
+  const N = RADIAL_NAMES.length;
+  for (let i = 0; i < N; i++) {
+    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / N;
+    out[RADIAL_NAMES[i]!] = {
+      x: center.x + RADIAL_RADIUS * Math.cos(angle),
+      y: center.y + RADIAL_RADIUS * Math.sin(angle),
+    };
+  }
+  return out as Record<RadialIconName, Point>;
 }
 
 function hitTestIcon(menuPos: Point, cursor: Point): RadialIconName | null {
@@ -46,6 +51,11 @@ function hitTestIcon(menuPos: Point, cursor: Point): RadialIconName | null {
     if (Math.hypot(cursor.x - p.x, cursor.y - p.y) <= RADIAL_HIT_RADIUS) return name;
   }
   return null;
+}
+
+/** True iff this vector kind supports the "edit" radial action. */
+function canEdit(kind: string): boolean {
+  return kind === "text" || kind === "latex";
 }
 
 function getCanvasCtx(): CanvasRenderingContext2D | undefined {
@@ -83,6 +93,29 @@ function commitPlacingDuplicate(ctx: ToolContext): void {
     ? ops[0]!
     : { kind: "batch", ops });
   reset(ctx);
+}
+
+/** Open a text or latex vector for editing via the radial "edit" action.
+ * Removes the vector from the store (so only the in-progress copy is visible)
+ * and stashes the original on state.editingOriginal so Escape can restore it.
+ * Then switches to the appropriate tool. The actual edit UI is the existing
+ * in-canvas cursor (text) or the bottom-bar input (latex). */
+function openEdit(ctx: ToolContext, v: Vector): void {
+  ctx.state.editingOriginal = v;
+  // Remove from store but DON'T record — we'll record either an add (Escape)
+  // or the new edited version (commit). Either way the original is gone.
+  ctx.state.store.apply({ kind: "delete", vector: v });
+  if (v.kind === "text") {
+    ctx.state.textEditing = { ...v, text: v.text };
+    reset(ctx);
+    ctx.switchTool("text");
+  } else if (v.kind === "latex") {
+    ctx.state.latexEditing = { ...v, text: v.text };
+    reset(ctx);
+    ctx.switchTool("latex");
+  } else {
+    reset(ctx);
+  }
 }
 
 function openRadialMenu(ctx: ToolContext, hit: Vector, screenPt: Point, pointerId: number, target: EventTarget | null): void {
@@ -291,6 +324,15 @@ export const modifyTool: Tool = {
           (e.target as Element | null)?.releasePointerCapture?.(e.pointerId);
           startPlacingDuplicate(ctx, v, screenPt);
         } else reset(ctx);
+      } else if (icon === "edit" && targetId) {
+        const v = ctx.state.store.vectors.get(targetId);
+        if (v && canEdit(v.kind)) {
+          (e.target as Element | null)?.releasePointerCapture?.(e.pointerId);
+          openEdit(ctx, v);
+        } else {
+          // Edit unsupported for this vector kind — silently dismiss the menu.
+          reset(ctx);
+        }
       } else {
         reset(ctx);
       }

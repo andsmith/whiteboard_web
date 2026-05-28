@@ -389,6 +389,30 @@ html, body {
 .anchor-swatch:hover { outline: 1.5px solid var(--hover); outline-offset: 2px; }
 .anchor-swatch.selected { border-color: var(--ink); outline: 1.5px solid var(--ink); outline-offset: 2px; }
 
+/* LaTeX source-input bar — bottom-of-canvas overlay above the submit bar */
+#latex-input-bar {
+  position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%);
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 8px 12px; border-radius: 6px;
+  background: white; border: 1px solid var(--panel-border);
+  box-shadow: var(--shadow-md);
+  z-index: 6;
+  min-width: 420px; max-width: 80%;
+  font-size: 0.85rem;
+}
+.latex-input-label { color: var(--ink-faint); font-weight: 500; padding-top: 3px; flex: 0 0 auto; }
+#latex-input-textarea {
+  flex: 1 1 auto; min-width: 0;
+  font-family: ui-monospace, "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 0.9rem; line-height: 1.4;
+  border: 1px solid var(--panel-border); border-radius: 4px;
+  padding: 4px 8px;
+  resize: none; outline: none;
+  background: white; color: var(--ink);
+}
+#latex-input-textarea:focus { border-color: var(--ink); }
+.latex-input-hint { color: var(--ink-faint); font-size: 0.72rem; padding-top: 4px; flex: 0 0 auto; }
+
 /* Submit bar — bottom-of-canvas overlay above the bottom-bar */
 .submit-bar {
   position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);

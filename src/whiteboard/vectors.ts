@@ -1,6 +1,6 @@
 import type { Point } from "./view";
 
-export type VectorKind = "pencil" | "line" | "rect" | "circle" | "polyline" | "text";
+export type VectorKind = "pencil" | "line" | "rect" | "circle" | "polyline" | "text" | "latex";
 
 export interface BaseVector {
   id: string;
@@ -26,7 +26,13 @@ export interface TextVector extends BaseVector {
   rotation?: number;
 }
 
-export type Vector = PencilVector | LineVector | RectVector | CircleVector | PolylineVector | TextVector;
+export interface LatexVector extends BaseVector {
+  kind: "latex"; pos: Point; text: string; fontSize: number;
+  /** Rotation in radians around `pos` (top-left anchor of the rendered block). */
+  rotation?: number;
+}
+
+export type Vector = PencilVector | LineVector | RectVector | CircleVector | PolylineVector | TextVector | LatexVector;
 
 export function newVectorId(): string {
   return (crypto as Crypto & { randomUUID?: () => string }).randomUUID?.()
@@ -58,6 +64,17 @@ export function getBoundingBox(v: Vector): { minX: number; minY: number; maxX: n
     case "text": {
       // Crude — actual width depends on font metrics; treat as a tiny box near pos.
       return { minX: v.pos.x, minY: v.pos.y - v.fontSize, maxX: v.pos.x + v.fontSize * 4, maxY: v.pos.y };
+    }
+    case "latex": {
+      // Coarse — dimensions depend on KaTeX rendering. Approximate as 5×fontSize wide
+      // per line so hit-tests still work before the cached image is available.
+      const lines = Math.max(1, v.text.split("\n").length);
+      return {
+        minX: v.pos.x,
+        minY: v.pos.y - v.fontSize,
+        maxX: v.pos.x + v.fontSize * 5,
+        maxY: v.pos.y + v.fontSize * 1.5 * (lines - 1),
+      };
     }
   }
 }

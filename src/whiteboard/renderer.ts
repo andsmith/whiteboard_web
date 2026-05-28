@@ -1,8 +1,9 @@
 import type { AppState } from "./app-state";
-import type { Vector, TextVector } from "./vectors";
+import type { Vector, TextVector, LatexVector } from "./vectors";
 import type { Anchor } from "./anchors";
 import { applyOpsTo, opAffectedIds } from "./submissions";
 import { getRadialIconPositions } from "./tools/modify";
+import { getCachedLatex, renderLatex } from "./latex-render";
 
 export const ANCHOR_ICON_R = 14;     // hit-test radius in screen px
 const PENDING_ALPHA = 0.55;
@@ -125,6 +126,10 @@ export class CanvasRenderer {
     if (this.state.textEditing) {
       this.drawVector(this.state.textEditing, { alpha: 1.0 });
       this.drawTextCursor(this.state.textEditing);
+    }
+    if (this.state.latexEditing) {
+      // No blinking cursor — the bottom-bar textarea has the OS cursor.
+      this.drawVector(this.state.latexEditing, { alpha: 1.0 });
     }
     // Anchors render on top of vectors, below transient UI overlays.
     for (const a of this.state.anchors.values()) {
@@ -357,6 +362,10 @@ export class CanvasRenderer {
         this.drawText(v, opts.override);
         break;
       }
+      case "latex": {
+        this.drawLatex(v, opts.override);
+        break;
+      }
     }
     ctx.restore();
   }
@@ -376,6 +385,45 @@ export class CanvasRenderer {
     if (v.rotation) ctx.rotate(v.rotation);
     for (let i = 0; i < lines.length; i++) {
       ctx.fillText(lines[i]!, 0, i * lineHeight);
+    }
+    ctx.restore();
+  }
+
+  private drawLatex(v: LatexVector, override?: string): void {
+    const ctx = this.ctx;
+    const view = this.state.view;
+    const color = override ?? v.color;
+    // KaTeX renders at the vector's color/fontSize. For an in-progress edit
+    // (state.latexEditing) we still hit the same cache and re-render on text
+    // change because latex-input.ts warms the cache on every keystroke.
+    const cached = getCachedLatex(v.text, color, v.fontSize);
+    const start = view.worldToPixels(v.pos);
+    ctx.save();
+    ctx.translate(start.x, start.y);
+    if (v.rotation) ctx.rotate(v.rotation);
+    // KaTeX renders at world-space fontSize (pixels). We scale by zoom to put
+    // the rasterized image in screen space at the right size.
+    const scale = view.zoom;
+    if (cached) {
+      // The image was rendered at fontSize world-pixels; drawing it at
+      // (width*scale, height*scale) makes the rendered math the correct size.
+      ctx.drawImage(cached.image, 0, -cached.height * scale * 0.85,
+        cached.width * scale, cached.height * scale);
+    } else {
+      // Placeholder while the image rasterizes: italic source text.
+      const px = Math.max(8, v.fontSize * scale);
+      ctx.font = `italic ${px}px ui-monospace, monospace`;
+      ctx.fillStyle = color;
+      ctx.textBaseline = "alphabetic";
+      const lines = (v.text.length === 0 ? "·" : v.text).split("\n");
+      const lineHeight = px * 1.3;
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i]!, 0, (i - lines.length + 1) * lineHeight);
+      }
+      // Kick off the rasterization (idempotent / cached-by-promise).
+      void renderLatex(v.text, color, v.fontSize)
+        .then(() => this.invalidate())
+        .catch(() => { /* ignore */ });
     }
     ctx.restore();
   }
@@ -409,7 +457,7 @@ export class CanvasRenderer {
     if (!menu) return;
     const ctx = this.ctx;
     const positions = getRadialIconPositions(menu.pos);
-    for (const name of ["rotate", "scale", "delete", "duplicate"] as const) {
+    for (const name of ["rotate", "scale", "delete", "duplicate", "edit"] as const) {
       const pos = positions[name];
       const hovered = menu.hoverIcon === name;
       const r = hovered ? RADIAL_ICON_R_HOVER : RADIAL_ICON_R;
@@ -434,7 +482,7 @@ export class CanvasRenderer {
     }
   }
 
-  private drawRadialIcon(name: "delete" | "rotate" | "scale" | "duplicate"): void {
+  private drawRadialIcon(name: "delete" | "rotate" | "scale" | "duplicate" | "edit"): void {
     const ctx = this.ctx;
     switch (name) {
       case "delete": {
@@ -519,6 +567,43 @@ export class CanvasRenderer {
         ctx.moveTo(-2, -5); ctx.lineTo(-2, 1);
         ctx.moveTo(-5, -2); ctx.lineTo(1, -2);
         ctx.stroke();
+        break;
+      }
+      case "edit": {
+        // A pencil at 45° pointing down-right. Body + tip + eraser.
+        ctx.strokeStyle = "#9a4500";
+        ctx.fillStyle = "#9a4500";
+        ctx.lineWidth = 1.6;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.save();
+        ctx.rotate(Math.PI / 4); // tilt up-left -> down-right
+        // Pencil body
+        ctx.beginPath();
+        ctx.rect(-8, -2, 12, 4);
+        ctx.stroke();
+        // Eraser end (left)
+        ctx.fillStyle = "#cf5a1a";
+        ctx.fillRect(-8, -2, 3, 4);
+        ctx.strokeRect(-8, -2, 3, 4);
+        // Wood tip (right)
+        ctx.fillStyle = "#f3d6a8";
+        ctx.beginPath();
+        ctx.moveTo(4, -2);
+        ctx.lineTo(8, 0);
+        ctx.lineTo(4, 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // Graphite tip
+        ctx.fillStyle = "#202020";
+        ctx.beginPath();
+        ctx.moveTo(7, -0.7);
+        ctx.lineTo(8, 0);
+        ctx.lineTo(7, 0.7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
         break;
       }
     }

@@ -1,6 +1,6 @@
 import type { Tool, ToolContext } from "./tool";
 import { eventCanvasPoint } from "./tool";
-import type { Vector } from "../vectors";
+import type { Vector, TextVector, LatexVector } from "../vectors";
 import { snap, snapAngle, type Point } from "../view";
 import { renderedBboxPx, bboxIntersects, findHit, type Bbox } from "../hit-test";
 import { translateVector, scaleVector, rotateVector, duplicateVector } from "../vector-ops";
@@ -93,10 +93,22 @@ function openRadial(ctx: ToolContext, screenPt: Point, pointerId: number, target
 
 function hitTestIcon(menuPos: Point, cursor: Point): RadialIconName | null {
   const positions = getRadialIconPositions(menuPos);
-  for (const name of ["rotate", "scale", "delete", "duplicate"] as const) {
+  for (const name of ["rotate", "scale", "delete", "duplicate", "edit"] as const) {
     const p = positions[name];
     if (Math.hypot(cursor.x - p.x, cursor.y - p.y) <= RADIAL_HIT_RADIUS) return name;
   }
+  return null;
+}
+
+/** True if the current selection is exactly one text or latex vector. */
+function singleEditableSelected(ctx: ToolContext): TextVector | LatexVector | null {
+  if (ctx.state.selectedIds.size !== 1) return null;
+  const id = ctx.state.selectedIds.values().next().value;
+  if (!id) return null;
+  const v = ctx.state.store.vectors.get(id);
+  if (!v) return null;
+  if (v.kind === "text") return v;
+  if (v.kind === "latex") return v;
   return null;
 }
 
@@ -327,6 +339,29 @@ export const selectTool: Tool = {
       } else if (icon === "duplicate") {
         (e.target as Element | null)?.releasePointerCapture?.(e.pointerId);
         startPlacingDuplicateSelection(ctx, screenPt);
+      } else if (icon === "edit") {
+        const v = singleEditableSelected(ctx);
+        if (v) {
+          (e.target as Element | null)?.releasePointerCapture?.(e.pointerId);
+          // Remove from store so only the in-progress copy renders; stash
+          // the original so Escape can restore it.
+          ctx.state.editingOriginal = v;
+          ctx.state.store.apply({ kind: "delete", vector: v });
+          if (v.kind === "text") {
+            ctx.state.textEditing = { ...v, text: v.text };
+            mode = "idle";
+            ctx.state.selectedIds.clear();
+            ctx.switchTool("text");
+          } else {
+            ctx.state.latexEditing = { ...v, text: v.text };
+            mode = "idle";
+            ctx.state.selectedIds.clear();
+            ctx.switchTool("latex");
+          }
+        } else {
+          mode = "idle";
+          ctx.invalidate();
+        }
       } else {
         mode = "idle";
         ctx.invalidate();

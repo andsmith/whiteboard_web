@@ -13,6 +13,8 @@ import { mountDebugPanel } from "./ui/debug-panel";
 import { mountAnchorsPanel } from "./ui/anchors-panel";
 import { mountAnchorDialog } from "./ui/anchor-dialog";
 import { mountSubmitBar } from "./ui/submit-bar";
+import { mountLatexInput } from "./ui/latex-input";
+import { renderLatex } from "./latex-render";
 import { RoomManager } from "./room-manager";
 import { generateRoomId, isValidRoomId } from "./room-id";
 import { getBoundingBox, type Vector } from "./vectors";
@@ -48,7 +50,12 @@ window.addEventListener("DOMContentLoaded", () => {
     invalidate();
   };
 
-  const toolCtx: ToolContext = { state, invalidate, getMyId, commitVector };
+  // switchTool is defined below; toolCtx references it lazily so the
+  // forward declaration is fine. (Arrow function captures the binding.)
+  const toolCtx: ToolContext = {
+    state, invalidate, getMyId, commitVector,
+    switchTool: (t) => switchTool(t),
+  };
 
   // ---------- Helpers ----------
   const hashRoomId = (): string | null => {
@@ -307,6 +314,66 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // Tick the submit-bar every second so the rejected-hint can fade out.
   setInterval(() => submitBar.update(), 1000);
+
+  // Bottom-bar LaTeX source input. Visibility driven by state.latexEditing.
+  const latexInput = mountLatexInput({
+    state,
+    invalidate,
+    onCommit: () => {
+      const v = state.latexEditing;
+      if (!v) return;
+      if (v.text.length > 0) {
+        commitVector(v);  // adds + broadcasts via the usual path
+      } else if (state.editingOriginal) {
+        // Empty commit on an edit session: restore the original.
+        state.store.applyAndRecord({ kind: "add", vector: state.editingOriginal });
+      }
+      state.latexEditing = null;
+      state.editingOriginal = null;
+      latexInput.update();
+      invalidate();
+    },
+    onCancel: () => {
+      // Restore the original if this was an edit session.
+      if (state.editingOriginal) {
+        state.store.applyAndRecord({ kind: "add", vector: state.editingOriginal });
+      }
+      state.latexEditing = null;
+      state.editingOriginal = null;
+      latexInput.update();
+      invalidate();
+    },
+  });
+
+  // Drive the latex-input visibility on every render tick — no separate
+  // observer needed; this is cheap and idempotent.
+  setInterval(() => latexInput.update(), 200);
+
+  // The text tool's "edit" flow uses state.textEditing too. When the user
+  // clicks elsewhere (committing the edited text) we need to restore the
+  // original if they made it empty. Wrap commitVector once.
+  // (Implementation note: text.ts always uses ctx.commitVector for non-empty
+  // text, so a non-empty commit just naturally replaces the original. Empty
+  // text discards — restore from editingOriginal in that case.)
+  // We hook this via a small interval that watches for textEditing leaving
+  // a populated state without a commit while editingOriginal exists.
+  let lastTextEditing: typeof state.textEditing = null;
+  setInterval(() => {
+    if (lastTextEditing && !state.textEditing && state.editingOriginal) {
+      // textEditing was cleared (probably by commitCurrent or a tool switch).
+      // If the cleared vector was empty AND we had an original, restore it.
+      if (lastTextEditing.text.length === 0) {
+        state.store.applyAndRecord({ kind: "add", vector: state.editingOriginal });
+        invalidate();
+      }
+      state.editingOriginal = null;
+    }
+    lastTextEditing = state.textEditing;
+  }, 200);
+
+  // Warm the KaTeX cache as soon as we mount so the first user keystroke
+  // doesn't take a font-load hit.
+  void renderLatex(" ", "#000000", 16).catch(() => { /* ignore */ });
 
   const dialog = mountJoinDialog({
     getHashRoomId: hashRoomId,
@@ -1035,6 +1102,8 @@ function shapeCoords(v: Vector): string {
     case "polyline":
       return `${v.points.length} pts, first=(${r(v.points[0]?.x ?? 0)},${r(v.points[0]?.y ?? 0)})`;
     case "text":
+      return `(${r(v.pos.x)},${r(v.pos.y)}) "${v.text.slice(0, 20)}"`;
+    case "latex":
       return `(${r(v.pos.x)},${r(v.pos.y)}) "${v.text.slice(0, 20)}"`;
   }
 }

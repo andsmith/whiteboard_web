@@ -24,4 +24,7 @@ export const ICONS: Record<string, string> = {
   grid: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 3h18v18H3z"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>`,
 
   anchor: `<svg viewBox="0 0 24 24" ${STROKE}><circle cx="12" cy="5" r="2"/><path d="M12 7v13"/><path d="M7 11h10"/><path d="M4 14a8 8 0 0016 0"/></svg>`,
+
+  // "Lx" matches the text tool's "Ab" style so the two are visually paired.
+  latex: `<svg viewBox="0 0 24 24" fill="currentColor"><text x="2" y="18" font-family="serif" font-size="16" font-weight="600" font-style="italic">L</text><text x="13" y="18" font-family="serif" font-size="13" font-weight="500" font-style="italic">x</text></svg>`,
 };
