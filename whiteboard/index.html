@@ -12,7 +12,10 @@
 
       <div id="title-bar">
         <h1 id="title-text">Whiteboard-Web (Disconnected)</h1>
-        <button id="participants-chip" type="button" title="Toggle participants">Participants (0)</button>
+        <div id="title-chips">
+          <button id="debug-chip" type="button" title="Toggle debug window">Debug</button>
+          <button id="participants-chip" type="button" title="Toggle participants">Participants (0)</button>
+        </div>
       </div>
 
       <div id="canvas-area">
@@ -33,6 +36,18 @@
             </div>
             <ul id="participants-list"></ul>
             <button id="btn-leave-meeting" type="button">Leave meeting</button>
+          </div>
+        </div>
+
+        <div id="debug-panel">
+          <div id="debug-tab">▸ Debug</div>
+          <div id="debug-content">
+            <div class="participants-header-row">
+              <span id="debug-header">Debug window</span>
+              <button id="btn-debug-clear" type="button" title="Clear log">Clear</button>
+              <button id="btn-collapse-debug" type="button" title="Collapse">▸</button>
+            </div>
+            <ul id="debug-list"></ul>
           </div>
         </div>
       </div>

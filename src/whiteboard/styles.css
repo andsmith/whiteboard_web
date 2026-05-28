@@ -46,13 +46,16 @@ html, body {
   font-weight: 500;
   color: var(--ink);
 }
-#participants-chip {
+#title-chips {
   position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  display: flex; gap: 8px;
+}
+#participants-chip, #debug-chip {
   background: transparent; border: 1px solid var(--panel-border);
   padding: 4px 10px; border-radius: 14px; cursor: pointer;
   font-size: 0.8rem; color: var(--ink-faint);
 }
-#participants-chip:hover { color: var(--ink); }
+#participants-chip:hover, #debug-chip:hover { color: var(--ink); }
 
 /* Canvas area */
 #canvas-area { position: relative; overflow: hidden; }
@@ -157,18 +160,18 @@ html, body {
 }
 .cmd-btn.dragging { outline: 1.5px solid var(--select); outline-offset: 2px; }
 
-/* Right panel — participants */
+/* Right panel — participants (top half of right edge) */
 #participants-panel {
-  position: absolute; right: 0; top: 0; bottom: 0;
+  position: absolute; right: 0; top: 0; height: 50%;
   width: 28px;
   background: var(--panel-bg); backdrop-filter: blur(8px);
   box-shadow: -1px 0 4px rgba(0, 0, 0, 0.08);
   display: flex; flex-direction: column;
   z-index: 3;
-  transition: width 0.18s ease;
+  transition: width 0.18s ease, height 0.18s ease;
   border-left: 1px solid var(--panel-border);
 }
-#participants-panel.expanded { width: 280px; }
+#participants-panel.expanded { width: 280px; height: 100%; z-index: 5; }
 #participants-tab {
   display: flex; align-items: center; justify-content: center;
   padding: 14px 0; cursor: pointer; font-size: 0.85rem; color: var(--ink-faint);
@@ -176,8 +179,66 @@ html, body {
   user-select: none;
 }
 #participants-panel.expanded #participants-tab { display: none; }
-#participants-content { display: none; flex: 1; flex-direction: column; padding: 12px; }
+#participants-content { display: none; flex: 1; flex-direction: column; padding: 12px; min-height: 0; }
 #participants-panel.expanded #participants-content { display: flex; }
+
+/* Right panel — debug (bottom half of right edge) */
+#debug-panel {
+  position: absolute; right: 0; bottom: 0; height: 50%;
+  width: 28px;
+  background: var(--panel-bg); backdrop-filter: blur(8px);
+  box-shadow: -1px 0 4px rgba(0, 0, 0, 0.08);
+  display: flex; flex-direction: column;
+  z-index: 3;
+  transition: width 0.18s ease, height 0.18s ease;
+  border-left: 1px solid var(--panel-border);
+  border-top: 1px solid var(--panel-border);
+}
+#debug-panel.expanded { width: 420px; height: 100%; z-index: 5; }
+#debug-tab {
+  display: flex; align-items: center; justify-content: center;
+  padding: 14px 0; cursor: pointer; font-size: 0.85rem; color: var(--ink-faint);
+  writing-mode: vertical-rl;
+  user-select: none;
+}
+#debug-panel.expanded #debug-tab { display: none; }
+#debug-content { display: none; flex: 1; flex-direction: column; padding: 12px; min-height: 0; }
+#debug-panel.expanded #debug-content { display: flex; }
+#debug-header { font-weight: 500; }
+#btn-collapse-debug, #btn-debug-clear {
+  background: transparent; border: none; cursor: pointer;
+  font-size: 0.85rem; color: var(--ink-faint);
+}
+#btn-debug-clear {
+  border: 1px solid var(--panel-border); border-radius: 4px;
+  padding: 2px 8px; margin-left: auto;
+}
+#btn-collapse-debug { font-size: 1rem; }
+#debug-list {
+  list-style: none; padding: 0; margin: 0; flex: 1; overflow-y: auto;
+  font-family: ui-monospace, "SF Mono", "Menlo", "Consolas", "Liberation Mono", monospace;
+  font-size: 0.72rem;
+}
+.debug-entry {
+  padding: 2px 0; border-bottom: 1px solid var(--panel-border);
+  display: grid; grid-template-columns: 90px 50px 1fr; gap: 6px;
+  word-break: break-word; line-height: 1.3;
+}
+.debug-ts { color: var(--ink-faint); }
+.debug-kind {
+  color: white; padding: 0 4px; border-radius: 3px; text-align: center;
+  font-size: 0.65rem; height: 1.15rem; line-height: 1.15rem;
+  background: #888;
+}
+.debug-entry.debug-draw  .debug-kind { background: #2a6; }
+.debug-entry.debug-modify .debug-kind { background: #08a; }
+.debug-entry.debug-rtc   .debug-kind { background: #66a; }
+.debug-entry.debug-net   .debug-kind { background: #444; }
+.debug-entry.debug-send  .debug-kind { background: #c70; }
+.debug-entry.debug-recv  .debug-kind { background: #a40; }
+.debug-entry.debug-warn  .debug-kind { background: #c44; }
+.debug-entry.debug-info  .debug-kind { background: #888; }
+.debug-msg { color: var(--ink); }
 .participants-header-row {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 8px;

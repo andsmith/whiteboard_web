@@ -37,6 +37,7 @@ export interface AppState {
   showGrid: boolean;
   snapToGrid: boolean;
   participantsExpanded: boolean;
+  debugExpanded: boolean;
   store: VectorStore;
   /** Live preview of an in-progress drawing (line/rect/circle/polyline/pencil). */
   inProgress: Vector | null;
@@ -66,6 +67,7 @@ export function createInitialState(): AppState {
     showGrid: true,
     snapToGrid: false,
     participantsExpanded: true,
+    debugExpanded: false,
     store: new VectorStore(),
     inProgress: null,
     textEditing: null,

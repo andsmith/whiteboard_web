@@ -12,12 +12,15 @@ export interface TitleBarHandle {
 export function mountTitleBar(opts: {
   getTitle: () => TitleInfo;
   onToggleParticipants: () => void;
+  onToggleDebug: () => void;
   getParticipantCount: () => number;
 }): TitleBarHandle {
   const title = document.getElementById("title-text") as HTMLElement | null;
   const chip = document.getElementById("participants-chip") as HTMLButtonElement | null;
+  const debugChip = document.getElementById("debug-chip") as HTMLButtonElement | null;
 
   chip?.addEventListener("click", opts.onToggleParticipants);
+  debugChip?.addEventListener("click", opts.onToggleDebug);
 
   const update = () => {
     if (title) {
