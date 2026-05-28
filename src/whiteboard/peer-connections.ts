@@ -1,9 +1,19 @@
 import type { Vector } from "./vectors";
 import type { Op } from "./vector-store";
+import type { Anchor, AnchorView } from "./anchors";
+import type { Submission } from "./submissions";
 
 export type DataMessage =
-  | { type: "snapshot"; vectors: Vector[] }
-  | { type: "op"; op: Op };
+  | { type: "snapshot"; vectors: Vector[]; anchors: Anchor[] }
+  | { type: "op"; op: Op }
+  | { type: "anchor-add"; anchor: Anchor }
+  | { type: "anchor-delete"; anchorId: string }
+  | { type: "presence-dirty"; dirty: boolean }
+  | { type: "submission"; submission: Submission }
+  | { type: "submission-result"; submissionId: string; result: "accept" | "reject" };
+
+// Re-export for callers that wire the message into other systems.
+export type { AnchorView };
 
 export interface PeerConnectionsHandlers {
   onMessage: (from: string, msg: DataMessage) => void;
@@ -241,8 +251,15 @@ function short(peerId: string): string {
 }
 
 function describeDataMessage(msg: DataMessage): string {
-  if (msg.type === "snapshot") return `snapshot[${msg.vectors.length} vectors]`;
-  return `op:${describeOp(msg.op)}`;
+  switch (msg.type) {
+    case "snapshot": return `snapshot[${msg.vectors.length}v ${msg.anchors.length}a]`;
+    case "op": return `op:${describeOp(msg.op)}`;
+    case "anchor-add": return `anchor-add ${short(msg.anchor.id)} "${msg.anchor.name}"`;
+    case "anchor-delete": return `anchor-delete ${short(msg.anchorId)}`;
+    case "presence-dirty": return `presence-dirty=${msg.dirty}`;
+    case "submission": return `submission ${short(msg.submission.id)} ops=${msg.submission.ops.length}`;
+    case "submission-result": return `submission-${msg.result} ${short(msg.submissionId)}`;
+  }
 }
 
 function describeOp(op: Op): string {

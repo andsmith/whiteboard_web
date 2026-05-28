@@ -1,6 +1,12 @@
 import type { AppState } from "./app-state";
 import type { Vector, TextVector } from "./vectors";
+import type { Anchor } from "./anchors";
+import { applyOpsTo, opAffectedIds } from "./submissions";
 import { getRadialIconPositions } from "./tools/modify";
+
+export const ANCHOR_ICON_R = 14;     // hit-test radius in screen px
+const PENDING_ALPHA = 0.55;
+const PENDING_DASH = [6, 4];
 
 const CELL_WORLD = 20;
 const HEAVY_EVERY = 5;
@@ -68,6 +74,12 @@ export class CanvasRenderer {
     ctx.fillRect(0, 0, w, h);
     if (this.state.showGrid) this.drawGrid(w, h);
 
+    // Compute the active preview overlay (host side) so we know which vector
+    // IDs to skip-then-redraw with the pending style.
+    const previewIds = this.activePreviewIds();
+    const previewMap = previewIds ? this.buildPreviewMap() : null;
+    const pendingIds = this.localPendingIds();
+
     for (const v of this.state.store.vectors.values()) {
       const isDragging = this.state.dragLockedTargetId === v.id;
       const isCandidate = this.state.selectionBox?.candidates.has(v.id) ?? false;
@@ -76,7 +88,29 @@ export class CanvasRenderer {
       let override: string | undefined;
       if (isDragging || isSelected) override = DRAG_COLOR;
       else if (isCandidate || isHovered) override = HOVER_COLOR;
+
+      // If the host is previewing a submission AND this vector is among the
+      // affected ones, render the *preview* version instead of the current one.
+      if (previewMap && previewIds && previewIds.has(v.id)) {
+        const pv = previewMap.get(v.id);
+        if (pv) this.drawVector(pv, { override, alpha: PENDING_ALPHA, dash: PENDING_DASH });
+        continue; // skip the actual vector; preview replaces it visually
+      }
+      // Submitter-side pending visualization: anything affected by pendingOps
+      // gets the same dashed/alpha cue.
+      if (pendingIds.has(v.id)) {
+        this.drawVector(v, { override, alpha: PENDING_ALPHA, dash: PENDING_DASH });
+        continue;
+      }
       this.drawVector(v, { override });
+    }
+    // Pure-add preview vectors (not in the host's store yet).
+    if (previewMap && previewIds) {
+      for (const id of previewIds) {
+        if (this.state.store.vectors.has(id)) continue;
+        const pv = previewMap.get(id);
+        if (pv) this.drawVector(pv, { alpha: PENDING_ALPHA, dash: PENDING_DASH });
+      }
     }
     if (this.state.inProgress) {
       this.drawVector(this.state.inProgress, { alpha: 0.7 });
@@ -85,12 +119,106 @@ export class CanvasRenderer {
       this.drawVector(this.state.textEditing, { alpha: 1.0 });
       this.drawTextCursor(this.state.textEditing);
     }
+    // Anchors render on top of vectors, below transient UI overlays.
+    for (const a of this.state.anchors.values()) {
+      this.drawAnchor(a);
+    }
+    if (this.state.hoverAnchorId) {
+      const a = this.state.anchors.get(this.state.hoverAnchorId);
+      if (a) this.drawAnchorTooltip(a);
+    }
     if (this.state.selectionBox) {
       this.drawSelectionBox();
     }
     if (this.state.radialMenu) {
       this.drawRadialMenu();
     }
+  }
+
+  private activePreviewIds(): Set<string> | null {
+    const preview = this.state.activeSubmissionPreview;
+    if (!preview || !preview.visible) return null;
+    const submission = this.state.pendingSubmissions.find((s) => s.id === preview.submissionId);
+    if (!submission) return null;
+    const ids = new Set<string>();
+    for (const op of submission.ops) opAffectedIds(op, ids);
+    return ids;
+  }
+
+  private buildPreviewMap(): Map<string, Vector> | null {
+    const preview = this.state.activeSubmissionPreview;
+    if (!preview || !preview.visible) return null;
+    const submission = this.state.pendingSubmissions.find((s) => s.id === preview.submissionId);
+    if (!submission) return null;
+    const map = new Map<string, Vector>(this.state.store.vectors);
+    for (const op of submission.ops) applyOpsTo(map, op);
+    return map;
+  }
+
+  private localPendingIds(): Set<string> {
+    // Only meaningful for view-only users. For host / edit guests pendingOps
+    // is always empty, so the set comes out empty too.
+    const ids = new Set<string>();
+    for (const op of this.state.pendingOps) opAffectedIds(op, ids);
+    return ids;
+  }
+
+  private drawAnchor(a: Anchor): void {
+    const ctx = this.ctx;
+    const p = this.state.view.worldToPixels(a.position);
+    const r = 14; // constant screen-space radius
+    ctx.save();
+    ctx.shadowColor = "rgba(0,0,0,0.18)";
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 1;
+    ctx.fillStyle = "white";
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.strokeStyle = a.color;
+    ctx.lineWidth = 1.8;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    // Mini anchor shape.
+    ctx.beginPath();
+    ctx.arc(0, -6, 2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, -4);
+    ctx.lineTo(0, 7);
+    ctx.moveTo(-4, -1);
+    ctx.lineTo(4, -1);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 4, 6, Math.PI * 0.16, Math.PI - Math.PI * 0.16);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  private drawAnchorTooltip(a: Anchor): void {
+    const ctx = this.ctx;
+    const p = this.state.view.worldToPixels(a.position);
+    const text = a.name;
+    ctx.save();
+    ctx.font = "12px system-ui, -apple-system, sans-serif";
+    const padX = 6;
+    const metrics = ctx.measureText(text);
+    const w = metrics.width + padX * 2;
+    const h = 18;
+    const x = p.x + 18;
+    const y = p.y - h / 2;
+    ctx.fillStyle = "rgba(0,0,0,0.78)";
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.fill();
+    ctx.fillStyle = "white";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x + padX, y + h / 2 + 0.5);
+    ctx.restore();
   }
 
   private drawSelectionBox(): void {
@@ -152,7 +280,7 @@ export class CanvasRenderer {
     ctx.strokeStyle = GRID_HEAVY; ctx.stroke();
   }
 
-  private drawVector(v: Vector, opts: { alpha?: number; override?: string } = {}): void {
+  private drawVector(v: Vector, opts: { alpha?: number; override?: string; dash?: number[] } = {}): void {
     const ctx = this.ctx;
     const view = this.state.view;
     ctx.save();
@@ -163,6 +291,7 @@ export class CanvasRenderer {
     ctx.lineWidth = Math.max(0.5, v.thickness * view.zoom);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
+    if (opts.dash) ctx.setLineDash(opts.dash);
 
     switch (v.kind) {
       case "pencil":

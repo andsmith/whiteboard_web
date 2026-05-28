@@ -22,4 +22,6 @@ export const ICONS: Record<string, string> = {
   fontsize: `<svg viewBox="0 0 24 24" fill="currentColor"><text x="1" y="18" font-size="14" font-family="serif">A</text><text x="11" y="18" font-size="20" font-family="serif">A</text></svg>`,
   snapgrid: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity="0.5"><path d="M3 3h18v18H3z"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/><circle cx="9" cy="9" r="2.5" fill="currentColor" stroke="none" stroke-opacity="1" opacity="1"/></svg>`,
   grid: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M3 3h18v18H3z"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>`,
+
+  anchor: `<svg viewBox="0 0 24 24" ${STROKE}><circle cx="12" cy="5" r="2"/><path d="M12 7v13"/><path d="M7 11h10"/><path d="M4 14a8 8 0 0016 0"/></svg>`,
 };

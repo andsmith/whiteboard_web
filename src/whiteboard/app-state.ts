@@ -1,8 +1,10 @@
 import { BoardView } from "./view";
-import { VectorStore } from "./vector-store";
+import { VectorStore, type Op } from "./vector-store";
 import type { ToolId } from "./tools/tool";
 import type { TextVector, Vector } from "./vectors";
 import type { Point } from "./view";
+import type { Anchor } from "./anchors";
+import type { Submission } from "./submissions";
 
 export const COLORS = [
   "#000000", "#808080",
@@ -28,6 +30,12 @@ export interface SelectionBoxState {
   candidates: Set<string>;
 }
 
+export interface PreviewState {
+  submissionId: string;
+  visible: boolean;
+  savedView: { origin: Point; zoom: number };
+}
+
 export interface AppState {
   view: BoardView;
   currentTool: ToolId;
@@ -38,6 +46,7 @@ export interface AppState {
   snapToGrid: boolean;
   participantsExpanded: boolean;
   debugExpanded: boolean;
+  anchorsExpanded: boolean;
   store: VectorStore;
   /** Live preview of an in-progress drawing (line/rect/circle/polyline/pencil). */
   inProgress: Vector | null;
@@ -45,6 +54,8 @@ export interface AppState {
   textEditing: TextVector | null;
   /** Vector currently moused over by the modify tool. */
   hoverId: string | null;
+  /** Anchor currently moused over (for the on-canvas name tooltip). */
+  hoverAnchorId: string | null;
   /** Radial menu state, while the menu is open. */
   radialMenu: RadialMenuState | null;
   /** While the user is mid-drag with the modify tool, wheel-zoom keeps
@@ -55,6 +66,20 @@ export interface AppState {
   /** In-progress selection box; while non-null its `candidates` are
    * highlighted green to show what will be selected on release. */
   selectionBox: SelectionBoxState | null;
+  /** Bookmarks of pan/zoom + colored marker. Synced via host. */
+  anchors: Map<string, Anchor>;
+  /** View-only users accumulate ops here as they draw; ops are also applied
+   * to the local store so the user sees them. The list is flushed on Submit. */
+  pendingOps: Op[];
+  /** Host-side queue of inbound submissions awaiting review. */
+  pendingSubmissions: Submission[];
+  /** Active preview state on the host while reviewing a submission. */
+  activeSubmissionPreview: PreviewState | null;
+  /** Host-side: which peers have signalled having local pending changes. */
+  peerDirty: Map<string, boolean>;
+  /** Submitter-side: transient flag set after a rejection so the UI can show
+   * a "rejected — keep refining" hint. Cleared on next op or after a few sec. */
+  lastRejectedAt: number | null;
 }
 
 export function createInitialState(): AppState {
@@ -68,13 +93,21 @@ export function createInitialState(): AppState {
     snapToGrid: false,
     participantsExpanded: true,
     debugExpanded: false,
+    anchorsExpanded: false,
     store: new VectorStore(),
     inProgress: null,
     textEditing: null,
     hoverId: null,
+    hoverAnchorId: null,
     radialMenu: null,
     dragLockedTargetId: null,
     selectedIds: new Set(),
     selectionBox: null,
+    anchors: new Map(),
+    pendingOps: [],
+    pendingSubmissions: [],
+    activeSubmissionPreview: null,
+    peerDirty: new Map(),
+    lastRejectedAt: null,
   };
 }

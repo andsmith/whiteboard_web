@@ -11,9 +11,10 @@
     <div id="whiteboard-app">
 
       <div id="title-bar">
-        <h1 id="title-text">Whiteboard-Web Version 0.0.2 (Disconnected)</h1>
+        <h1 id="title-text">Whiteboard-Web Version 0.0.3 (Disconnected)</h1>
         <div id="title-chips">
           <button id="debug-chip" type="button" title="Toggle debug window">Debug</button>
+          <button id="anchors-chip" type="button" title="Toggle anchors">Anchors (0)</button>
           <button id="participants-chip" type="button" title="Toggle participants">Participants (0)</button>
         </div>
       </div>
@@ -39,6 +40,17 @@
           </div>
         </div>
 
+        <div id="anchors-panel">
+          <div id="anchors-tab">▸ Anchors</div>
+          <div id="anchors-content">
+            <div class="participants-header-row">
+              <span id="anchors-header">Anchors</span>
+              <button id="btn-collapse-anchors" type="button" title="Collapse">▸</button>
+            </div>
+            <ul id="anchors-list"></ul>
+          </div>
+        </div>
+
         <div id="debug-panel">
           <div id="debug-tab">▸ Debug</div>
           <div id="debug-content">
@@ -50,6 +62,8 @@
             <ul id="debug-list"></ul>
           </div>
         </div>
+
+        <div id="submit-bar" class="submit-bar" style="display:none"></div>
       </div>
 
       <div id="bottom-bar">
@@ -92,6 +106,23 @@
       <div class="dial-label">Font size: <span id="fontsize-value">16</span></div>
       <div id="fontsize-sample">Ab</div>
     </div>
+
+    <dialog id="anchor-dialog">
+      <h2>Save anchor</h2>
+      <p class="subtitle">Bookmark the current pan/zoom so you can return to it later.</p>
+      <div class="dialog-row">
+        <label for="anchor-name">Name:</label>
+        <input id="anchor-name" type="text" maxlength="40" autocomplete="off" placeholder="e.g. Top-left" />
+      </div>
+      <div class="dialog-row">
+        <label>Color:</label>
+        <div id="anchor-swatches" class="anchor-swatch-row"></div>
+      </div>
+      <div class="dialog-actions">
+        <button id="anchor-btn-cancel" type="button">Cancel</button>
+        <button id="anchor-btn-save" type="button" disabled>Save</button>
+      </div>
+    </dialog>
 
     <dialog id="join-dialog">
       <h2>Whiteboard-Web</h2>

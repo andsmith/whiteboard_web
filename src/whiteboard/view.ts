@@ -17,6 +17,10 @@ export function snapAngle(rad: number, enabled: boolean): number {
   return Math.round(rad / step) * step;
 }
 
+export interface BBox {
+  minX: number; minY: number; maxX: number; maxY: number;
+}
+
 export class BoardView {
   origin: Point = { x: 0, y: 0 };
   zoom = 1.0;
@@ -40,5 +44,27 @@ export class BoardView {
     this.zoom = newZoom;
     this.origin.x = worldBefore.x - pivotPx.x / this.zoom;
     this.origin.y = worldBefore.y - pivotPx.y / this.zoom;
+  }
+
+  /** Centre a world-space bbox in the canvas with `paddingPx` empty margin
+   * around it. Mutates origin + zoom together. */
+  fitToBbox(bbox: BBox, canvasPx: { width: number; height: number }, paddingPx = 40): void {
+    const bw = Math.max(1, bbox.maxX - bbox.minX);
+    const bh = Math.max(1, bbox.maxY - bbox.minY);
+    const availW = Math.max(1, canvasPx.width - paddingPx * 2);
+    const availH = Math.max(1, canvasPx.height - paddingPx * 2);
+    const z = Math.min(availW / bw, availH / bh);
+    this.zoom = Math.max(0.01, z);
+    const cx = (bbox.minX + bbox.maxX) / 2;
+    const cy = (bbox.minY + bbox.maxY) / 2;
+    this.origin.x = cx - canvasPx.width / 2 / this.zoom;
+    this.origin.y = cy - canvasPx.height / 2 / this.zoom;
+  }
+
+  /** True iff the world-space bbox is fully inside the current viewport. */
+  containsBbox(bbox: BBox, canvasPx: { width: number; height: number }): boolean {
+    const tl = this.worldToPixels({ x: bbox.minX, y: bbox.minY });
+    const br = this.worldToPixels({ x: bbox.maxX, y: bbox.maxY });
+    return tl.x >= 0 && tl.y >= 0 && br.x <= canvasPx.width && br.y <= canvasPx.height;
   }
 }

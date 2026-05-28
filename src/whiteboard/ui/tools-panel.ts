@@ -1,7 +1,7 @@
 import type { AppState, ColorHex } from "../app-state";
 import { COLORS } from "../app-state";
-import type { ToolId } from "../tools/tool";
-import { NAV_TOOL_ORDER, DRAW_TOOL_ORDER } from "../tools/registry";
+import type { ToolId, ActionDef, ActionId } from "../tools/tool";
+import { NAV_TOOL_ORDER, DRAW_TOOL_ORDER, ACTION_ORDER } from "../tools/registry";
 import { ICONS } from "./icons";
 
 export interface ToolsPanelHandle {
@@ -10,8 +10,11 @@ export interface ToolsPanelHandle {
 
 export function mountToolsPanel(opts: {
   state: AppState;
+  actions: Record<ActionId, ActionDef>;
   onToolChange: (t: ToolId) => void;
   onColorChange: (c: ColorHex) => void;
+  onAction: (id: ActionId) => void;
+  isActionDisabled: (id: ActionId) => boolean;
   onHome: () => void;
 }): ToolsPanelHandle {
   const navHost = document.getElementById("nav-tools") as HTMLElement | null;
@@ -46,6 +49,24 @@ export function mountToolsPanel(opts: {
     navHost.appendChild(homeBtn);
   }
 
+  // Action buttons — sit in the nav grid below the home button. Same
+  // visual style as tools, but clicking doesn't change currentTool.
+  if (navHost) {
+    for (const id of ACTION_ORDER) {
+      const def = opts.actions[id];
+      const btn = document.createElement("button");
+      btn.className = "tool-btn action-btn";
+      btn.dataset.action = id;
+      btn.title = def.title;
+      btn.innerHTML = ICONS[def.iconId] ?? "";
+      btn.addEventListener("click", () => {
+        if (opts.isActionDisabled(id)) return;
+        opts.onAction(id);
+      });
+      navHost.appendChild(btn);
+    }
+  }
+
   if (colorsHost) {
     colorsHost.innerHTML = "";
     for (const c of COLORS) {
@@ -62,8 +83,17 @@ export function mountToolsPanel(opts: {
   const update = () => {
     [navHost, drawHost].forEach((host) => {
       host?.querySelectorAll<HTMLButtonElement>(".tool-btn").forEach((b) => {
-        b.classList.toggle("selected", b.dataset.tool === opts.state.currentTool);
+        if (b.dataset.tool) {
+          b.classList.toggle("selected", b.dataset.tool === opts.state.currentTool);
+        }
       });
+    });
+    navHost?.querySelectorAll<HTMLButtonElement>(".action-btn").forEach((b) => {
+      const id = b.dataset.action as ActionId | undefined;
+      if (!id) return;
+      const disabled = opts.isActionDisabled(id);
+      b.classList.toggle("disabled", disabled);
+      b.disabled = disabled;
     });
     colorsHost?.querySelectorAll<HTMLButtonElement>(".color-btn").forEach((b) => {
       b.classList.toggle("selected", b.dataset.color === opts.state.color);

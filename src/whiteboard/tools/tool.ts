@@ -26,6 +26,22 @@ export interface Tool {
   onMiddleClick?(e: PointerEvent, ctx: ToolContext): void;
 }
 
+/** Action button shown in the toolbar — unlike Tool, it does not become the
+ * active pointer-tool when clicked. Clicking just fires onClick (e.g., opens
+ * a dialog). Used for the "create anchor" button. */
+export type ActionId = "anchor-create";
+
+export interface ActionDef {
+  id: ActionId;
+  /** Key into the icons.ts ICONS map. */
+  iconId: string;
+  title: string;
+  /** Returns true if the action is currently disabled (e.g., view-only user
+   * trying to use an editor-only action). */
+  isDisabled?(ctx: ToolContext): boolean;
+  onClick(ctx: ToolContext): void;
+}
+
 export function eventCanvasPoint(e: PointerEvent): { x: number; y: number } {
   const target = e.currentTarget as HTMLElement | null;
   if (!target) return { x: e.clientX, y: e.clientY };

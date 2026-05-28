@@ -1,8 +1,8 @@
 import "./styles.css";
 import { createInitialState } from "./app-state";
-import { CanvasRenderer } from "./renderer";
+import { CanvasRenderer, ANCHOR_ICON_R } from "./renderer";
 import { TOOLS } from "./tools/registry";
-import type { ToolContext, ToolId } from "./tools/tool";
+import type { ToolContext, ToolId, ActionDef, ActionId } from "./tools/tool";
 import { mountTitleBar, type TitleStatus } from "./ui/title-bar";
 import { mountToolsPanel } from "./ui/tools-panel";
 import { mountBottomBar, type TrashMode } from "./ui/bottom-bar";
@@ -10,20 +10,27 @@ import { mountDial } from "./ui/dials";
 import { mountParticipantsPanel } from "./ui/participants-panel";
 import { mountJoinDialog } from "./ui/join-dialog";
 import { mountDebugPanel } from "./ui/debug-panel";
+import { mountAnchorsPanel } from "./ui/anchors-panel";
+import { mountAnchorDialog } from "./ui/anchor-dialog";
+import { mountSubmitBar } from "./ui/submit-bar";
 import { RoomManager } from "./room-manager";
 import { generateRoomId, isValidRoomId } from "./room-id";
-import type { Vector } from "./vectors";
+import { getBoundingBox, type Vector } from "./vectors";
 import { scaleVector, getCenter } from "./vector-ops";
 import { PeerConnections, type DataMessage } from "./peer-connections";
 import type { Op } from "./vector-store";
 import { loadIceServers } from "./ice-config";
 import { DebugLog } from "./debug-log";
+import { newAnchorId, type Anchor } from "./anchors";
+import { newSubmissionId, applyOpsTo, opAffectedIds, type Submission } from "./submissions";
+import type { BBox } from "./view";
 
 const MY_ID = `local-${Math.random().toString(36).slice(2, 8)}`;
 
 window.addEventListener("DOMContentLoaded", () => {
-  const canvas = document.getElementById("canvas") as HTMLCanvasElement | null;
-  if (!canvas) return;
+  const canvasOrNull = document.getElementById("canvas") as HTMLCanvasElement | null;
+  if (!canvasOrNull) return;
+  const canvas: HTMLCanvasElement = canvasOrNull;
 
   const state = createInitialState();
   const room = new RoomManager();
@@ -73,31 +80,68 @@ window.addEventListener("DOMContentLoaded", () => {
     invalidate();
   };
 
+  // Mutually-exclusive sidebar toggle: opening one collapses the others.
+  const collapseAllRightPanels = () => {
+    state.participantsExpanded = false;
+    state.debugExpanded = false;
+    state.anchorsExpanded = false;
+  };
+  const updateRightPanels = () => {
+    participantsPanel.update();
+    debugPanel.update();
+    anchorsPanel.update();
+  };
+
   // ---------- UI mounts ----------
   const titleBar = mountTitleBar({
     getTitle: () => ({ status: computeStatus(), roomId: room.state.roomId }),
     getParticipantCount: () => room.participantCount(),
+    getAnchorCount: () => state.anchors.size,
     onToggleParticipants: () => {
-      state.participantsExpanded = !state.participantsExpanded;
-      if (state.participantsExpanded) state.debugExpanded = false;
-      participantsPanel.update();
-      debugPanel.update();
+      const next = !state.participantsExpanded;
+      collapseAllRightPanels();
+      state.participantsExpanded = next;
+      updateRightPanels();
     },
     onToggleDebug: () => {
-      state.debugExpanded = !state.debugExpanded;
-      if (state.debugExpanded) state.participantsExpanded = false;
-      debugPanel.update();
-      participantsPanel.update();
+      const next = !state.debugExpanded;
+      collapseAllRightPanels();
+      state.debugExpanded = next;
+      updateRightPanels();
+    },
+    onToggleAnchors: () => {
+      const next = !state.anchorsExpanded;
+      collapseAllRightPanels();
+      state.anchorsExpanded = next;
+      updateRightPanels();
     },
   });
 
+  // Action definitions: the anchor-create button. Disabled for view-only.
+  const actions: Record<ActionId, ActionDef> = {
+    "anchor-create": {
+      id: "anchor-create",
+      iconId: "anchor",
+      title: "Save anchor (bookmark this view)",
+      isDisabled: () => room.myPerm() === "view",
+      onClick: () => { void createAnchorFlow(); },
+    },
+  };
+
   const toolsPanel = mountToolsPanel({
     state,
+    actions,
     onToolChange: switchTool,
     onColorChange: (c) => {
       state.color = c;
       toolsPanel.update();
     },
+    onAction: (id) => {
+      const def = actions[id];
+      if (def.isDisabled?.(toolCtx)) return;
+      def.onClick(toolCtx);
+    },
+    isActionDisabled: (id) => actions[id].isDisabled?.(toolCtx) ?? false,
     onHome: () => {
       state.view.origin = { x: 0, y: 0 };
       state.view.zoom = 1;
@@ -130,7 +174,26 @@ window.addEventListener("DOMContentLoaded", () => {
       invalidate();
     },
     onTrash: () => {
-      // For now (no networking): delete vectors I authored.
+      // View-only user: trash button is "refresh" — discard local pending
+      // ops and re-sync from the host's snapshot.
+      if (room.myPerm() === "view" && !room.isHost()) {
+        if (state.pendingOps.length === 0) return;
+        // Invert each pending op (most-recent first) and apply to reset to
+        // the host's authoritative state.
+        for (let i = state.pendingOps.length - 1; i >= 0; i--) {
+          const op = state.pendingOps[i]!;
+          state.store.apply(invertForRevert(op));
+        }
+        state.pendingOps.length = 0;
+        state.lastRejectedAt = null;
+        if (peerConnections) {
+          peerConnections.sendToAll({ type: "presence-dirty", dirty: false });
+        }
+        submitBar.update();
+        bottomBar.update();
+        invalidate();
+        return;
+      }
       const myId = getMyId();
       state.store.deleteWhere((v) => v.author === myId);
       bottomBar.update();
@@ -181,11 +244,12 @@ window.addEventListener("DOMContentLoaded", () => {
     getState: () => room.state,
     isHost: () => room.isHost(),
     isExpanded: () => state.participantsExpanded,
+    getPeerDirty: () => state.peerDirty,
     onToggle: () => {
-      state.participantsExpanded = !state.participantsExpanded;
-      if (state.participantsExpanded) state.debugExpanded = false;
-      participantsPanel.update();
-      debugPanel.update();
+      const next = !state.participantsExpanded;
+      collapseAllRightPanels();
+      state.participantsExpanded = next;
+      updateRightPanels();
     },
     onPromote: (peerId) => room.promote(peerId),
     onPermChange: (peerId, perm) => room.setPerm(peerId, perm),
@@ -199,12 +263,43 @@ window.addEventListener("DOMContentLoaded", () => {
     log: debugLog,
     isExpanded: () => state.debugExpanded,
     onToggle: () => {
-      state.debugExpanded = !state.debugExpanded;
-      if (state.debugExpanded) state.participantsExpanded = false;
-      debugPanel.update();
-      participantsPanel.update();
+      const next = !state.debugExpanded;
+      collapseAllRightPanels();
+      state.debugExpanded = next;
+      updateRightPanels();
     },
   });
+
+  const anchorsPanel = mountAnchorsPanel({
+    getAnchors: () => state.anchors,
+    isExpanded: () => state.anchorsExpanded,
+    canEdit: () => room.myPerm() !== "view",
+    onToggle: () => {
+      const next = !state.anchorsExpanded;
+      collapseAllRightPanels();
+      state.anchorsExpanded = next;
+      updateRightPanels();
+    },
+    onNavigate: (id) => navigateToAnchor(id),
+    onDelete: (id) => deleteAnchor(id),
+  });
+
+  const anchorDialog = mountAnchorDialog();
+
+  const submitBar = mountSubmitBar({
+    getPendingCount: () => state.pendingOps.length,
+    getLastRejectedAt: () => state.lastRejectedAt,
+    getActiveSubmission: () => state.pendingSubmissions[0] ?? null,
+    isPreviewVisible: () => state.activeSubmissionPreview?.visible ?? false,
+    getPendingSubmissionsCount: () => state.pendingSubmissions.length,
+    onSubmit: () => submitPendingOps(),
+    onTogglePreview: () => toggleSubmissionPreview(),
+    onAccept: () => acceptActiveSubmission(),
+    onReject: () => rejectActiveSubmission(),
+  });
+
+  // Tick the submit-bar every second so the rejected-hint can fade out.
+  setInterval(() => submitBar.update(), 1000);
 
   const dialog = mountJoinDialog({
     getHashRoomId: hashRoomId,
@@ -226,8 +321,19 @@ window.addEventListener("DOMContentLoaded", () => {
     titleBar.update();
     bottomBar.update();
     participantsPanel.update();
+    toolsPanel.update();   // perm changes can disable anchor-create
+    anchorsPanel.update(); // canEdit depends on perm
+    submitBar.update();
     if (room.state.status === "ended") {
       stopPeerConnections();
+      // Wipe collaborative state — we're leaving the room.
+      state.anchors.clear();
+      state.pendingOps.length = 0;
+      state.pendingSubmissions.length = 0;
+      state.activeSubmissionPreview = null;
+      state.peerDirty.clear();
+      anchorsPanel.update();
+      submitBar.update();
       dialog.show(room.state.endMessage ?? "");
     }
   };
@@ -237,28 +343,88 @@ window.addEventListener("DOMContentLoaded", () => {
   let peerConnectionsPromise: Promise<PeerConnections> | null = null;
   let iceServersCache: RTCIceServer[] | null = null;
 
-  const applyRemoteSnapshot = (vectors: Vector[]): void => {
+  const applyRemoteSnapshot = (vectors: Vector[], anchors: Anchor[]): void => {
     // First-join snapshot from host: replace local store with the official set.
-    // (Conflict-aware merge with local additions is a TODO.)
     state.store.vectors.clear();
     for (const v of vectors) state.store.vectors.set(v.id, v);
     state.store.clearHistory();
+    state.anchors.clear();
+    for (const a of anchors) state.anchors.set(a.id, a);
+    // Re-apply any local pending ops on top so view-only users' in-flight work
+    // survives a snapshot. (Fixes the lossy-snapshot caveat for view-only users.)
+    for (const op of state.pendingOps) state.store.apply(op);
+    titleBar.update();
+    anchorsPanel.update();
     bottomBar.update();
     invalidate();
   };
 
   const handlePeerMessage = (from: string, msg: DataMessage): void => {
-    if (msg.type === "snapshot") {
-      debugLog.log("recv", `snapshot ← ${shortId(from)}: ${msg.vectors.length} vectors`);
-      applyRemoteSnapshot(msg.vectors);
-    } else if (msg.type === "op") {
-      debugLog.log("recv", `op ← ${shortId(from)}: ${describeOpLocal(msg.op)}`);
-      // Remote op: apply without recording in undo, and wipe our local
-      // undo history per the spec (remote changes invalidate it).
-      state.store.apply(msg.op);
-      state.store.clearHistory();
-      bottomBar.update();
-      invalidate();
+    switch (msg.type) {
+      case "snapshot":
+        debugLog.log("recv", `snapshot ← ${shortId(from)}: ${msg.vectors.length}v ${msg.anchors.length}a`);
+        applyRemoteSnapshot(msg.vectors, msg.anchors);
+        break;
+      case "op":
+        debugLog.log("recv", `op ← ${shortId(from)}: ${describeOpLocal(msg.op)}`);
+        // Remote op: apply without recording in undo, and wipe our local
+        // undo history per the spec (remote changes invalidate it).
+        state.store.apply(msg.op);
+        state.store.clearHistory();
+        bottomBar.update();
+        invalidate();
+        break;
+      case "anchor-add":
+        debugLog.log("recv", `anchor-add ← ${shortId(from)} "${msg.anchor.name}"`);
+        state.anchors.set(msg.anchor.id, msg.anchor);
+        // Host relays to other guests so all peers converge.
+        if (room.isHost() && peerConnections) {
+          peerConnections.sendToAll({ type: "anchor-add", anchor: msg.anchor });
+        }
+        titleBar.update();
+        anchorsPanel.update();
+        invalidate();
+        break;
+      case "anchor-delete":
+        debugLog.log("recv", `anchor-delete ← ${shortId(from)} ${shortId(msg.anchorId)}`);
+        state.anchors.delete(msg.anchorId);
+        if (room.isHost() && peerConnections) {
+          peerConnections.sendToAll({ type: "anchor-delete", anchorId: msg.anchorId });
+        }
+        titleBar.update();
+        anchorsPanel.update();
+        invalidate();
+        break;
+      case "presence-dirty":
+        debugLog.log("recv", `presence-dirty ← ${shortId(from)} dirty=${msg.dirty}`);
+        if (room.isHost()) {
+          if (msg.dirty) state.peerDirty.set(from, true);
+          else state.peerDirty.delete(from);
+          participantsPanel.update();
+        }
+        break;
+      case "submission":
+        debugLog.log("recv", `submission ← ${shortId(from)} ops=${msg.submission.ops.length}`);
+        if (room.isHost()) {
+          state.pendingSubmissions.push(msg.submission);
+          submitBar.update();
+        }
+        break;
+      case "submission-result":
+        debugLog.log("recv", `submission-${msg.result} ← ${shortId(from)}`);
+        if (msg.result === "accept") {
+          // Submitter side: our pending ops will arrive as a normal `op` from
+          // the host (the host applied via applyAndRecord which broadcasts).
+          // So we just clear our pendingOps and pendingDirty signal.
+          state.pendingOps.length = 0;
+          state.lastRejectedAt = null;
+          if (peerConnections) peerConnections.sendToAll({ type: "presence-dirty", dirty: false });
+        } else {
+          state.lastRejectedAt = Date.now();
+        }
+        submitBar.update();
+        invalidate();
+        break;
     }
   };
 
@@ -278,11 +444,12 @@ window.addEventListener("DOMContentLoaded", () => {
           onMessage: handlePeerMessage,
           onChannelOpen: (peerId) => {
             debugLog.log("rtc", `data channel OPEN with ${shortId(peerId)}`);
-            // Host pushes the current vector set to a newly-connected guest.
+            // Host pushes the current vector + anchor set to a newly-connected guest.
             if (room.isHost()) {
               const vectors = Array.from(state.store.vectors.values());
-              debugLog.log("send", `snapshot → ${shortId(peerId)}: ${vectors.length} vectors`);
-              pc.sendTo(peerId, { type: "snapshot", vectors });
+              const anchors = Array.from(state.anchors.values());
+              debugLog.log("send", `snapshot → ${shortId(peerId)}: ${vectors.length}v ${anchors.length}a`);
+              pc.sendTo(peerId, { type: "snapshot", vectors, anchors });
             }
           },
           onChannelClose: (peerId) => {
@@ -303,19 +470,229 @@ window.addEventListener("DOMContentLoaded", () => {
     peerConnectionsPromise = null;
   }
 
-  // Broadcast local ops (only host broadcasts to all guests for now).
+  // Route local ops based on role:
+  //   - host: broadcast to all guests.
+  //   - view-only guest: accumulate into pendingOps and signal presence-dirty
+  //                      to host; clear lastRejectedAt since the user has made
+  //                      a new edit.
+  //   - edit guest: still local-only (editor-mode TODO).
   state.store.onLocalChange = (op) => {
     debugLog.log("modify", `local op: ${describeOpLocal(op)}`);
-    if (!room.isHost()) {
-      debugLog.log("info", `not host — op NOT broadcast (guest editor mode not implemented)`);
+    if (room.isHost()) {
+      if (!peerConnections) {
+        debugLog.log("warn", `host op DROPPED — peerConnections not ready yet`);
+        return;
+      }
+      peerConnections.sendToAll({ type: "op", op });
       return;
     }
-    if (!peerConnections) {
-      debugLog.log("warn", `host op DROPPED — peerConnections not ready yet`);
+    if (room.myPerm() === "view") {
+      const wasEmpty = state.pendingOps.length === 0;
+      state.pendingOps.push(op);
+      state.lastRejectedAt = null;
+      submitBar.update();
+      if (wasEmpty && peerConnections) {
+        debugLog.log("send", `presence-dirty → host: true`);
+        peerConnections.sendToAll({ type: "presence-dirty", dirty: true });
+      }
       return;
     }
-    peerConnections.sendToAll({ type: "op", op });
+    debugLog.log("info", `edit guest — op NOT broadcast (editor mode not implemented)`);
   };
+
+  // ---------- Anchors ----------
+  async function createAnchorFlow(): Promise<void> {
+    const choice = await anchorDialog.prompt();
+    if (!choice) return;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    const center = state.view.pixelsToWorld({ x: w / 2, y: h / 2 });
+    const anchor: Anchor = {
+      id: newAnchorId(),
+      name: choice.name,
+      color: choice.color,
+      author: getMyId(),
+      createdAt: Date.now(),
+      view: { origin: { ...state.view.origin }, zoom: state.view.zoom },
+      position: center,
+    };
+    state.anchors.set(anchor.id, anchor);
+    debugLog.log("draw", `anchor "${anchor.name}" by ${myName()} id=${shortId(anchor.id)}`);
+    titleBar.update();
+    anchorsPanel.update();
+    invalidate();
+    // Sync: host broadcasts to all; non-host sends to host (host re-broadcasts
+    // on receipt via the handler above).
+    if (peerConnections) {
+      peerConnections.sendToAll({ type: "anchor-add", anchor });
+    }
+  }
+
+  function navigateToAnchor(id: string): void {
+    const a = state.anchors.get(id);
+    if (!a) return;
+    state.view.origin = { ...a.view.origin };
+    state.view.zoom = a.view.zoom;
+    bottomBar.update();
+    invalidate();
+  }
+
+  function deleteAnchor(id: string): void {
+    if (!state.anchors.has(id)) return;
+    state.anchors.delete(id);
+    titleBar.update();
+    anchorsPanel.update();
+    invalidate();
+    if (peerConnections) {
+      peerConnections.sendToAll({ type: "anchor-delete", anchorId: id });
+    }
+  }
+
+  // ---------- Submission flow (view-only guest side) ----------
+  function submitPendingOps(): void {
+    if (state.pendingOps.length === 0) return;
+    if (!peerConnections) {
+      debugLog.log("warn", "submit: peerConnections not ready");
+      return;
+    }
+    const submission: Submission = {
+      id: newSubmissionId(),
+      fromPeerId: getMyId(),
+      fromName: myName(),
+      ops: state.pendingOps.slice(),
+      submitterView: { origin: { ...state.view.origin }, zoom: state.view.zoom },
+      receivedAt: Date.now(),
+    };
+    debugLog.log("send", `submission → host: ${submission.ops.length} ops`);
+    peerConnections.sendToAll({ type: "submission", submission });
+    // Keep pendingOps locally until we hear back. On accept we clear them; on
+    // reject they stay so the user can keep refining.
+  }
+
+  // ---------- Submission flow (host side) ----------
+  function toggleSubmissionPreview(): void {
+    const active = state.pendingSubmissions[0];
+    if (!active) return;
+    const existing = state.activeSubmissionPreview;
+    if (existing && existing.submissionId === active.id) {
+      // Toggle visible flag.
+      if (existing.visible) {
+        // Hide: restore saved view.
+        state.view.origin = { ...existing.savedView.origin };
+        state.view.zoom = existing.savedView.zoom;
+        existing.visible = false;
+      } else {
+        // Show again.
+        showPreview(active);
+        existing.visible = true;
+      }
+      submitBar.update();
+      invalidate();
+      return;
+    }
+    // New preview entry — save current view and zoom appropriately.
+    state.activeSubmissionPreview = {
+      submissionId: active.id,
+      visible: true,
+      savedView: { origin: { ...state.view.origin }, zoom: state.view.zoom },
+    };
+    showPreview(active);
+    submitBar.update();
+    invalidate();
+  }
+
+  function showPreview(submission: Submission): void {
+    // Compute the bbox of every vector affected by submission.ops (using the
+    // *post-op* vectors). If the submitter's view contains it, use that;
+    // otherwise fit-bbox.
+    const map = new Map(state.store.vectors);
+    for (const op of submission.ops) applyOpsTo(map, op);
+    const affected = new Set<string>();
+    for (const op of submission.ops) opAffectedIds(op, affected);
+    const bbox = computeBboxForIds(map, affected);
+    if (!bbox) {
+      // No affected vectors? Just use submitter's view.
+      state.view.origin = { ...submission.submitterView.origin };
+      state.view.zoom = submission.submitterView.zoom;
+      return;
+    }
+    // Try submitter's view first.
+    const trial = { origin: { ...submission.submitterView.origin }, zoom: submission.submitterView.zoom };
+    const savedOrigin = { ...state.view.origin };
+    const savedZoom = state.view.zoom;
+    state.view.origin = trial.origin;
+    state.view.zoom = trial.zoom;
+    const canvasPx = { width: canvas.clientWidth, height: canvas.clientHeight };
+    if (state.view.containsBbox(bbox, canvasPx)) {
+      // Submitter's view works. Keep it.
+    } else {
+      // Otherwise fit-bbox.
+      state.view.origin = savedOrigin;
+      state.view.zoom = savedZoom;
+      state.view.fitToBbox(bbox, canvasPx, 60);
+    }
+    bottomBar.update();
+  }
+
+  function acceptActiveSubmission(): void {
+    const active = state.pendingSubmissions[0];
+    if (!active) return;
+    // Restore host's view before applying.
+    if (state.activeSubmissionPreview?.submissionId === active.id) {
+      state.view.origin = { ...state.activeSubmissionPreview.savedView.origin };
+      state.view.zoom = state.activeSubmissionPreview.savedView.zoom;
+    }
+    const batch: Op = { kind: "batch", ops: active.ops };
+    debugLog.log("modify", `accept submission from ${active.fromName}: ${active.ops.length} ops`);
+    state.store.applyAndRecord(batch);   // applies + broadcasts via onLocalChange
+    if (peerConnections) {
+      peerConnections.sendToAll({ type: "submission-result", submissionId: active.id, result: "accept" });
+    }
+    state.pendingSubmissions.shift();
+    state.activeSubmissionPreview = null;
+    // Host's local belief: that peer no longer has pending (the submitter
+    // clears their pendingOps on accept).
+    state.peerDirty.delete(active.fromPeerId);
+    submitBar.update();
+    participantsPanel.update();
+    bottomBar.update();
+    invalidate();
+  }
+
+  function rejectActiveSubmission(): void {
+    const active = state.pendingSubmissions[0];
+    if (!active) return;
+    if (state.activeSubmissionPreview?.submissionId === active.id) {
+      state.view.origin = { ...state.activeSubmissionPreview.savedView.origin };
+      state.view.zoom = state.activeSubmissionPreview.savedView.zoom;
+    }
+    debugLog.log("modify", `reject submission from ${active.fromName}`);
+    if (peerConnections) {
+      peerConnections.sendToAll({ type: "submission-result", submissionId: active.id, result: "reject" });
+    }
+    state.pendingSubmissions.shift();
+    state.activeSubmissionPreview = null;
+    // The submitter still has local pending changes; host's peerDirty stays true.
+    submitBar.update();
+    bottomBar.update();
+    invalidate();
+  }
+
+  function computeBboxForIds(map: Map<string, Vector>, ids: Set<string>): BBox | null {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let any = false;
+    for (const id of ids) {
+      const v = map.get(id);
+      if (!v) continue;
+      const b = getBoundingBox(v);
+      if (b.minX < minX) minX = b.minX;
+      if (b.minY < minY) minY = b.minY;
+      if (b.maxX > maxX) maxX = b.maxX;
+      if (b.maxY > maxY) maxY = b.maxY;
+      any = true;
+    }
+    return any ? { minX, minY, maxX, maxY } : null;
+  }
 
   // Drive WebRTC setup off the raw signaling stream. Every handler routes
   // through startPeerConnections() so signaling messages that arrive before
@@ -392,6 +769,27 @@ window.addEventListener("DOMContentLoaded", () => {
     if (e.button === 1) e.preventDefault();
   });
 
+  const eventCanvasPos = (e: PointerEvent): { x: number; y: number } => {
+    const rect = canvas.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
+
+  /** Hit-test all anchors at the given canvas-space pixel position.
+   * Returns the topmost anchor id under the point, or null. */
+  const anchorAt = (canvasPx: { x: number; y: number }): string | null => {
+    // Iterate in reverse insertion order so later anchors win when stacked.
+    const ids = Array.from(state.anchors.keys()).reverse();
+    for (const id of ids) {
+      const a = state.anchors.get(id);
+      if (!a) continue;
+      const p = state.view.worldToPixels(a.position);
+      const dx = canvasPx.x - p.x;
+      const dy = canvasPx.y - p.y;
+      if (dx * dx + dy * dy <= ANCHOR_ICON_R * ANCHOR_ICON_R) return id;
+    }
+    return null;
+  };
+
   canvas.addEventListener("pointerdown", (e) => {
     // Middle button: tool can override (polyline finalizes), else pan.
     if (e.button === 1) {
@@ -414,6 +812,15 @@ window.addEventListener("DOMContentLoaded", () => {
       (e.target as Element).setPointerCapture?.(e.pointerId);
       return;
     }
+    // Anchor hit-test: clicking an anchor navigates, regardless of tool.
+    if (e.button === 0) {
+      const id = anchorAt(eventCanvasPos(e));
+      if (id) {
+        e.preventDefault();
+        navigateToAnchor(id);
+        return;
+      }
+    }
     TOOLS[state.currentTool].onPointerDown?.(e, toolCtx);
   });
   canvas.addEventListener("pointermove", (e) => {
@@ -424,6 +831,13 @@ window.addEventListener("DOMContentLoaded", () => {
       panLast = { x: e.clientX, y: e.clientY };
       invalidate();
       return;
+    }
+    // Hover over an anchor → show name tooltip (and switch cursor).
+    const hoverId = anchorAt(eventCanvasPos(e));
+    if (hoverId !== state.hoverAnchorId) {
+      state.hoverAnchorId = hoverId;
+      canvas.style.cursor = hoverId ? "pointer" : TOOLS[state.currentTool].cursor;
+      invalidate();
     }
     TOOLS[state.currentTool].onPointerMove?.(e, toolCtx);
   });
@@ -486,12 +900,12 @@ window.addEventListener("DOMContentLoaded", () => {
     invalidate();
   }, { passive: false });
 
-  // Clear hover state on mouse leave (modify tool).
+  // Clear hover state on mouse leave (modify tool + anchors).
   canvas.addEventListener("pointerleave", () => {
-    if (state.hoverId !== null) {
-      state.hoverId = null;
-      invalidate();
-    }
+    let dirty = false;
+    if (state.hoverId !== null) { state.hoverId = null; dirty = true; }
+    if (state.hoverAnchorId !== null) { state.hoverAnchorId = null; dirty = true; }
+    if (dirty) invalidate();
   });
 
   // Global keyboard for tools (polyline Enter/Escape)
@@ -570,5 +984,14 @@ function describeOpLocal(op: Op): string {
     case "delete": return `delete ${op.vector.kind} ${shortId(op.vector.id)}`;
     case "replace": return `replace ${op.after.kind} ${shortId(op.after.id)} → ${shapeCoords(op.after)}`;
     case "batch": return `batch[${op.ops.length}]: ${op.ops.slice(0, 3).map(describeOpLocal).join("; ")}${op.ops.length > 3 ? "..." : ""}`;
+  }
+}
+
+function invertForRevert(op: Op): Op {
+  switch (op.kind) {
+    case "add": return { kind: "delete", vector: op.vector };
+    case "delete": return { kind: "add", vector: op.vector };
+    case "replace": return { kind: "replace", before: op.after, after: op.before };
+    case "batch": return { kind: "batch", ops: op.ops.slice().reverse().map(invertForRevert) };
   }
 }

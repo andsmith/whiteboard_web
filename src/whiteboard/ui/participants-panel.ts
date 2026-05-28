@@ -8,6 +8,8 @@ export function mountParticipantsPanel(opts: {
   getState: () => RoomManagerState;
   isHost: () => boolean;
   isExpanded: () => boolean;
+  /** Host-side: peers that have signalled local pending changes. */
+  getPeerDirty: () => Map<string, boolean>;
   onToggle: () => void;
   onPromote: (peerId: string) => void;
   onPermChange: (peerId: string, perm: Perm) => void;
@@ -70,6 +72,9 @@ export function mountParticipantsPanel(opts: {
         if (!p.isYou && !p.isHost) {
           const perm = state.perms.get(p.peerId) ?? "edit";
           if (perm === "view") li.appendChild(tag("view", "view only"));
+          if (opts.isHost() && opts.getPeerDirty().get(p.peerId)) {
+            li.appendChild(tag("dirty", "pending"));
+          }
         }
 
         if (opts.isHost() && !p.isYou && !p.isHost) {

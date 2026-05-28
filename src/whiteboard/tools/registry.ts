@@ -7,7 +7,7 @@ import { rectTool } from "./rect";
 import { circleTool } from "./circle";
 import { textTool } from "./text";
 import { polylineTool } from "./polyline";
-import type { Tool, ToolId } from "./tool";
+import type { Tool, ToolId, ActionDef, ActionId } from "./tool";
 
 export const TOOLS: Record<ToolId, Tool> = {
   select: selectTool,
@@ -29,3 +29,11 @@ export const DRAW_TOOL_ORDER: ToolId[] = [
   "rect", "circle",
   "text", "polyline",
 ];
+
+/** Action buttons in the toolbar — they don't become the active tool.
+ * Definitions are filled in by main.ts at mount time (since the click handler
+ * needs closures over room state and the dialog). The registry only declares
+ * what slots exist and their order. */
+export const ACTION_ORDER: ActionId[] = ["anchor-create"];
+
+export type { ActionDef };
