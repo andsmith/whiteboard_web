@@ -12,6 +12,7 @@ export function mountToolsPanel(opts: {
   state: AppState;
   onToolChange: (t: ToolId) => void;
   onColorChange: (c: ColorHex) => void;
+  onHome: () => void;
 }): ToolsPanelHandle {
   const navHost = document.getElementById("nav-tools") as HTMLElement | null;
   const drawHost = document.getElementById("draw-tools") as HTMLElement | null;
@@ -32,6 +33,18 @@ export function mountToolsPanel(opts: {
   };
   renderTools(navHost, NAV_TOOL_ORDER);
   renderTools(drawHost, DRAW_TOOL_ORDER);
+
+  // Home button — sits in the nav-tools grid alongside select/pan/modify.
+  // Not a tool: clicking it never sets currentTool, just resets the camera.
+  if (navHost) {
+    const homeBtn = document.createElement("button");
+    homeBtn.className = "tool-btn home-btn";
+    homeBtn.id = "btn-home";
+    homeBtn.title = "Home (reset pan/zoom)";
+    homeBtn.innerHTML = ICONS.home ?? "";
+    homeBtn.addEventListener("click", opts.onHome);
+    navHost.appendChild(homeBtn);
+  }
 
   if (colorsHost) {
     colorsHost.innerHTML = "";

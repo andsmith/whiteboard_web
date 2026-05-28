@@ -85,6 +85,12 @@ window.addEventListener("DOMContentLoaded", () => {
       state.color = c;
       toolsPanel.update();
     },
+    onHome: () => {
+      state.view.origin = { x: 0, y: 0 };
+      state.view.zoom = 1;
+      bottomBar.update();
+      invalidate();
+    },
   });
 
   const bottomBar = mountBottomBar({

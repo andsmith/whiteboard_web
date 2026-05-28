@@ -1,7 +1,7 @@
 import type { Tool, ToolContext } from "./tool";
 import { eventCanvasPoint } from "./tool";
 import type { Vector } from "../vectors";
-import type { Point } from "../view";
+import { snap, snapAngle, type Point } from "../view";
 import { renderedBboxPx, bboxIntersects, findHit, type Bbox } from "../hit-test";
 import { translateVector, scaleVector, rotateVector } from "../vector-ops";
 import type { Op } from "../vector-store";
@@ -11,7 +11,7 @@ type Mode = "idle" | "boxing" | "moving" | "menuOpen" | "rotating" | "scaling";
 
 let mode: Mode = "idle";
 let originals: Map<string, Vector> = new Map();
-let dragLastWorld: Point | null = null;
+let dragStartWorld: Point | null = null;
 let anchorWorld: Point | null = null;
 let menuPos: Point | null = null;
 let rotateStartAngle = 0;
@@ -134,7 +134,7 @@ export const selectTool: Tool = {
     if (clickedSelectedVectorId(ctx, screenPt)) {
       mode = "moving";
       captureOriginals(ctx);
-      dragLastWorld = ctx.state.view.pixelsToWorld(screenPt);
+      dragStartWorld = ctx.state.view.pixelsToWorld(screenPt);
       (e.target as Element).setPointerCapture?.(e.pointerId);
       ctx.invalidate();
       return;
@@ -175,16 +175,18 @@ export const selectTool: Tool = {
       return;
     }
 
-    if (mode === "moving" && dragLastWorld) {
-      const currentWorld = ctx.state.view.pixelsToWorld(screenPt);
-      const dx = currentWorld.x - dragLastWorld.x;
-      const dy = currentWorld.y - dragLastWorld.y;
-      for (const id of ctx.state.selectedIds) {
+    if (mode === "moving" && dragStartWorld) {
+      // Absolute drag against captured originals; shift snaps the click-point
+      // to the grid so the whole selection lands cleanly.
+      const worldNow = ctx.state.view.pixelsToWorld(screenPt);
+      const targetClick = e.shiftKey ? snap(worldNow, true) : worldNow;
+      const dx = targetClick.x - dragStartWorld.x;
+      const dy = targetClick.y - dragStartWorld.y;
+      for (const [id, orig] of originals) {
+        const moved = translateVector(orig, dx, dy);
         const current = ctx.state.store.vectors.get(id);
-        if (!current) continue;
-        ctx.state.store.apply({ kind: "replace", before: current, after: translateVector(current, dx, dy) });
+        if (current) ctx.state.store.apply({ kind: "replace", before: current, after: moved });
       }
-      dragLastWorld = currentWorld;
       ctx.invalidate();
       return;
     }
@@ -201,7 +203,8 @@ export const selectTool: Tool = {
     if (mode === "rotating" && anchorWorld) {
       const currentWorld = ctx.state.view.pixelsToWorld(screenPt);
       const angle = Math.atan2(currentWorld.y - anchorWorld.y, currentWorld.x - anchorWorld.x);
-      const delta = angle - rotateStartAngle;
+      let delta = angle - rotateStartAngle;
+      if (e.shiftKey) delta = snapAngle(delta, true); // snap to 45°
       for (const [id, orig] of originals) {
         const rotated = rotateVector(orig, delta, anchorWorld);
         const current = ctx.state.store.vectors.get(id);
@@ -236,7 +239,7 @@ export const selectTool: Tool = {
     if (mode === "moving") {
       commitTransformBatch(ctx);
       mode = "idle";
-      dragLastWorld = null;
+      dragStartWorld = null;
       ctx.invalidate();
       return;
     }
@@ -297,7 +300,7 @@ export const selectTool: Tool = {
     if (mode === "rotating" || mode === "scaling") revertTransform(ctx);
     mode = "idle";
     originals.clear();
-    dragLastWorld = null;
+    dragStartWorld = null;
     anchorWorld = null;
     menuPos = null;
     ctx.state.selectionBox = null;

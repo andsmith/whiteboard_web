@@ -10,6 +10,13 @@ export function snap(p: Point, enabled: boolean): Point {
   };
 }
 
+/** Snap an angle (radians) to the nearest 45° multiple if enabled. */
+export function snapAngle(rad: number, enabled: boolean): number {
+  if (!enabled) return rad;
+  const step = Math.PI / 4;
+  return Math.round(rad / step) * step;
+}
+
 export class BoardView {
   origin: Point = { x: 0, y: 0 };
   zoom = 1.0;

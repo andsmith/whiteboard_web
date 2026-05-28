@@ -7,7 +7,8 @@ export const ICONS: Record<string, string> = {
   circle: `<svg viewBox="0 0 24 24" ${STROKE}><circle cx="12" cy="12" r="7"/><rect x="11" y="11" width="2" height="2" fill="currentColor" stroke="none"/></svg>`,
   select: `<svg viewBox="0 0 24 24" ${STROKE} stroke-dasharray="3 2"><rect x="4" y="4" width="16" height="16"/></svg>`,
   pan: `<svg viewBox="0 0 24 24" ${STROKE}><path d="M12 3v18M3 12h18M9.5 5.5L12 3l2.5 2.5M9.5 18.5L12 21l2.5-2.5M5.5 9.5L3 12l2.5 2.5M18.5 9.5L21 12l-2.5 2.5"/></svg>`,
-  modify: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3l13 7-5.5 1.8L11 19l-2-1 1.5-7L5 3z"/></svg>`,
+  modify: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3 L5 19 L9 15 L12 22 L15 21 L12 14 L18 14 Z"/></svg>`,
+  home: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12L12 4l9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>`,
   text: `<svg viewBox="0 0 24 24" fill="currentColor"><text x="1" y="18" font-family="serif" font-size="16" font-weight="600">A</text><text x="13" y="18" font-family="serif" font-size="13" font-weight="500">b</text></svg>`,
   polyline: `<svg viewBox="0 0 24 24" ${STROKE}><polyline points="3,18 8,7 12,15 16,5 21,12"/></svg>`,
 

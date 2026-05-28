@@ -3,14 +3,15 @@ import { eventCanvasPoint } from "./tool";
 import { findHit } from "../hit-test";
 import { translateVector, scaleVector, rotateVector, getCenter } from "../vector-ops";
 import type { Vector } from "../vectors";
-import type { Point } from "../view";
+import { snap, snapAngle, type Point } from "../view";
 
 type Mode = "idle" | "moving" | "menuOpen" | "rotating" | "scaling";
 
 let mode: Mode = "idle";
 let targetId: string | null = null;
 let original: Vector | null = null;
-let lastWorld: Point | null = null;
+/** World-space position of the initial click — used for absolute drag math. */
+let dragStartWorld: Point | null = null;
 let menuPos: Point | null = null;
 
 let rotateStartAngle = 0;
@@ -52,7 +53,7 @@ function reset(ctx: ToolContext): void {
   mode = "idle";
   targetId = null;
   original = null;
-  lastWorld = null;
+  dragStartWorld = null;
   menuPos = null;
   ctx.state.radialMenu = null;
   ctx.state.dragLockedTargetId = null;
@@ -73,7 +74,7 @@ function startMove(ctx: ToolContext, hit: Vector, screenPt: Point, pointerId: nu
   mode = "moving";
   targetId = hit.id;
   original = hit;
-  lastWorld = ctx.state.view.pixelsToWorld(screenPt);
+  dragStartWorld = ctx.state.view.pixelsToWorld(screenPt);
   ctx.state.dragLockedTargetId = hit.id;
   (target as Element | null)?.setPointerCapture?.(pointerId);
   ctx.invalidate();
@@ -157,18 +158,18 @@ export const modifyTool: Tool = {
       return;
     }
 
-    if (mode === "moving" && targetId) {
+    if (mode === "moving" && targetId && original && dragStartWorld) {
+      // Absolute drag: translation = (target click-point) - (initial click-point).
+      // Shift-hold snaps the click-point to the grid so the object lands cleanly.
       const worldNow = ctx.state.view.pixelsToWorld(screenPt);
-      if (lastWorld) {
-        const dx = worldNow.x - lastWorld.x;
-        const dy = worldNow.y - lastWorld.y;
-        const current = ctx.state.store.vectors.get(targetId);
-        if (current) {
-          const moved = translateVector(current, dx, dy);
-          ctx.state.store.apply({ kind: "replace", before: current, after: moved });
-          ctx.invalidate();
-        }
-        lastWorld = worldNow;
+      const targetClick = e.shiftKey ? snap(worldNow, true) : worldNow;
+      const dx = targetClick.x - dragStartWorld.x;
+      const dy = targetClick.y - dragStartWorld.y;
+      const moved = translateVector(original, dx, dy);
+      const current = ctx.state.store.vectors.get(targetId);
+      if (current) {
+        ctx.state.store.apply({ kind: "replace", before: current, after: moved });
+        ctx.invalidate();
       }
       return;
     }
@@ -186,7 +187,8 @@ export const modifyTool: Tool = {
       const worldNow = ctx.state.view.pixelsToWorld(screenPt);
       const center = getCenter(original);
       const angleNow = Math.atan2(worldNow.y - center.y, worldNow.x - center.x);
-      const delta = angleNow - rotateStartAngle;
+      let delta = angleNow - rotateStartAngle;
+      if (e.shiftKey) delta = snapAngle(delta, true); // snap to 45°
       const rotated = rotateVector(original, delta, center);
       const current = ctx.state.store.vectors.get(targetId);
       if (current) {
