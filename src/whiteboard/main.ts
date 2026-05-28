@@ -252,7 +252,14 @@ window.addEventListener("DOMContentLoaded", () => {
       updateRightPanels();
     },
     onPromote: (peerId) => room.promote(peerId),
-    onPermChange: (peerId, perm) => room.setPerm(peerId, perm),
+    onPermChange: (peerId, perm) => {
+      room.setPerm(peerId, perm);
+      // Tell every peer (especially the target) about the change.
+      if (peerConnections) {
+        debugLog.log("send", `perm-update → all: ${shortId(peerId)}=${perm}`);
+        peerConnections.sendToAll({ type: "perm-update", peerId, perm });
+      }
+    },
     onLeave: () => {
       room.leave();
       if (location.hash) history.replaceState(null, "", location.pathname + location.search);
@@ -343,27 +350,34 @@ window.addEventListener("DOMContentLoaded", () => {
   let peerConnectionsPromise: Promise<PeerConnections> | null = null;
   let iceServersCache: RTCIceServer[] | null = null;
 
-  const applyRemoteSnapshot = (vectors: Vector[], anchors: Anchor[]): void => {
+  const applyRemoteSnapshot = (vectors: Vector[], anchors: Anchor[], perms: Array<[string, "edit" | "view"]>): void => {
     // First-join snapshot from host: replace local store with the official set.
     state.store.vectors.clear();
     for (const v of vectors) state.store.vectors.set(v.id, v);
     state.store.clearHistory();
     state.anchors.clear();
     for (const a of anchors) state.anchors.set(a.id, a);
+    // Sync perms — important so the guest knows its own perm and the
+    // submission flow can engage for view-only users.
+    room.state.perms.clear();
+    for (const [pid, perm] of perms) room.state.perms.set(pid, perm);
     // Re-apply any local pending ops on top so view-only users' in-flight work
     // survives a snapshot. (Fixes the lossy-snapshot caveat for view-only users.)
     for (const op of state.pendingOps) state.store.apply(op);
     titleBar.update();
+    participantsPanel.update();
     anchorsPanel.update();
     bottomBar.update();
+    toolsPanel.update();
+    submitBar.update();
     invalidate();
   };
 
   const handlePeerMessage = (from: string, msg: DataMessage): void => {
     switch (msg.type) {
       case "snapshot":
-        debugLog.log("recv", `snapshot ← ${shortId(from)}: ${msg.vectors.length}v ${msg.anchors.length}a`);
-        applyRemoteSnapshot(msg.vectors, msg.anchors);
+        debugLog.log("recv", `snapshot ← ${shortId(from)}: ${msg.vectors.length}v ${msg.anchors.length}a ${msg.perms.length}p`);
+        applyRemoteSnapshot(msg.vectors, msg.anchors, msg.perms);
         break;
       case "op":
         debugLog.log("recv", `op ← ${shortId(from)}: ${describeOpLocal(msg.op)}`);
@@ -425,6 +439,23 @@ window.addEventListener("DOMContentLoaded", () => {
         submitBar.update();
         invalidate();
         break;
+      case "perm-update":
+        debugLog.log("recv", `perm-update ← ${shortId(from)} ${shortId(msg.peerId)}=${msg.perm}`);
+        room.state.perms.set(msg.peerId, msg.perm);
+        // If host relays (someone else sent it to us), echo to other guests.
+        if (room.isHost() && peerConnections && from !== getMyId()) {
+          peerConnections.sendToAll({ type: "perm-update", peerId: msg.peerId, perm: msg.perm });
+        }
+        // If our own perm changed, refresh things that depend on it.
+        if (msg.peerId === getMyId()) {
+          titleBar.update();
+          bottomBar.update();
+          toolsPanel.update();
+          anchorsPanel.update();
+          submitBar.update();
+        }
+        participantsPanel.update();
+        break;
     }
   };
 
@@ -444,12 +475,16 @@ window.addEventListener("DOMContentLoaded", () => {
           onMessage: handlePeerMessage,
           onChannelOpen: (peerId) => {
             debugLog.log("rtc", `data channel OPEN with ${shortId(peerId)}`);
-            // Host pushes the current vector + anchor set to a newly-connected guest.
+            // Host pushes the current vector + anchor + perms set to a newly-
+            // connected guest. The perms entry tells the guest their own perm
+            // (otherwise myPerm() defaults to "edit" and the submission flow
+            // never engages).
             if (room.isHost()) {
               const vectors = Array.from(state.store.vectors.values());
               const anchors = Array.from(state.anchors.values());
-              debugLog.log("send", `snapshot → ${shortId(peerId)}: ${vectors.length}v ${anchors.length}a`);
-              pc.sendTo(peerId, { type: "snapshot", vectors, anchors });
+              const perms: Array<[string, "edit" | "view"]> = Array.from(room.state.perms.entries());
+              debugLog.log("send", `snapshot → ${shortId(peerId)}: ${vectors.length}v ${anchors.length}a ${perms.length}p`);
+              pc.sendTo(peerId, { type: "snapshot", vectors, anchors, perms });
             }
           },
           onChannelClose: (peerId) => {
