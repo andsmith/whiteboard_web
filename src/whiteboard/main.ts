@@ -729,7 +729,9 @@ window.addEventListener("DOMContentLoaded", () => {
     const ops: Op[] = children.map((c) => ({ kind: "delete" as const, vector: c }));
     ops.push({ kind: "add", vector: group });
     state.store.applyAndRecord({ kind: "batch", ops });
-    state.selectedIds = new Set([group.id]);
+    // Clear the selection — the new group is not auto-selected. The user can
+    // click it (or its children) afterwards.
+    state.selectedIds.clear();
     bottomBar.update();
     toolsPanel.update();
     invalidate();
@@ -737,24 +739,21 @@ window.addEventListener("DOMContentLoaded", () => {
 
   function ungroupSelection(): void {
     const ops: Op[] = [];
-    const newIds: string[] = [];
     for (const id of state.selectedIds) {
       const v = state.store.vectors.get(id);
       if (!v) continue;
       const replacement = decompose(v);
-      if (replacement === null) {
-        newIds.push(v.id);  // keep selection on non-ungroupable items
-        continue;
-      }
+      if (replacement === null) continue;  // not ungroupable; leave alone
       ops.push({ kind: "delete", vector: v });
       for (const r of replacement) {
         ops.push({ kind: "add", vector: r });
-        newIds.push(r.id);
       }
     }
     if (ops.length === 0) return;
     state.store.applyAndRecord({ kind: "batch", ops });
-    state.selectedIds = new Set(newIds);
+    // Clear the selection after ungrouping. The user picks up the freshly-
+    // exploded pieces by clicking / box-selecting next.
+    state.selectedIds.clear();
     bottomBar.update();
     toolsPanel.update();
     invalidate();
