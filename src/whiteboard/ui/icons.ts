@@ -10,7 +10,11 @@ export const ICONS: Record<string, string> = {
   modify: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 3 L5 19 L9 15 L12 22 L15 21 L12 14 L18 14 Z"/></svg>`,
   home: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12L12 4l9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>`,
   text: `<svg viewBox="0 0 24 24" fill="currentColor"><text x="1" y="18" font-family="serif" font-size="16" font-weight="600">A</text><text x="13" y="18" font-family="serif" font-size="13" font-weight="500">b</text></svg>`,
-  polyline: `<svg viewBox="0 0 24 24" ${STROKE}><polyline points="3,18 8,7 12,15 16,5 21,12"/></svg>`,
+  // Three-segment zigzag with small square markers at each of the four vertices,
+  // matching the visual treatment of the line icon (endpoint markers).
+  polyline: `<svg viewBox="0 0 24 24" ${STROKE}><path d="M5 18L10 6L14 14L20 5"/><rect x="3" y="16" width="4" height="4"/><rect x="8" y="4" width="4" height="4"/><rect x="12" y="12" width="4" height="4"/><rect x="18" y="3" width="4" height="4"/></svg>`,
+  // Closed three-segment polyline = triangle outline with markers at each vertex.
+  "closed-polyline": `<svg viewBox="0 0 24 24" ${STROKE}><path d="M5 19 L12 5 L19 19 Z"/><rect x="3" y="17" width="4" height="4"/><rect x="10" y="3" width="4" height="4"/><rect x="17" y="17" width="4" height="4"/></svg>`,
 
   undo: `<svg viewBox="0 0 24 24" ${STROKE}><path d="M9 14l-5-5 5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/></svg>`,
   redo: `<svg viewBox="0 0 24 24" ${STROKE}><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 000 12h3"/></svg>`,

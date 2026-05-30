@@ -809,7 +809,11 @@ window.addEventListener("DOMContentLoaded", () => {
   function polylineAsLines(p: Vector & { kind: "polyline" }): Vector[] {
     const me = getMyId();
     const lines: Vector[] = [];
-    for (let i = 0; i < p.points.length - 1; i++) {
+    const n = p.points.length;
+    // Open polyline → n-1 segments. Closed polyline → n segments (last
+    // segment wraps from the final point back to the first).
+    const segs = p.closed ? n : n - 1;
+    for (let i = 0; i < segs; i++) {
       lines.push({
         id: newVectorId(),
         kind: "line",
@@ -819,7 +823,7 @@ window.addEventListener("DOMContentLoaded", () => {
         thickness: p.thickness,
         createdAt: Date.now(),
         a: p.points[i]!,
-        b: p.points[i + 1]!,
+        b: p.points[(i + 1) % n]!,
       });
     }
     return lines;
@@ -1245,6 +1249,9 @@ window.addEventListener("DOMContentLoaded", () => {
       if (canvas.style.cursor !== desired) canvas.style.cursor = desired;
     }
     TOOLS[state.currentTool].onPointerMove?.(e, toolCtx);
+  });
+  canvas.addEventListener("dblclick", (e) => {
+    TOOLS[state.currentTool].onDoubleClick?.(e, toolCtx);
   });
   canvas.addEventListener("pointerup", (e) => {
     if (panLast) {

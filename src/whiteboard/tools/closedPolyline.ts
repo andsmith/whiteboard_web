@@ -3,6 +3,9 @@ import { eventCanvasPoint } from "./tool";
 import { newVectorId, type PolylineVector } from "../vectors";
 import { snap, type Point } from "../view";
 
+// Mirror of polyline.ts but commits with `closed: true`. Kept as its own tool
+// instance so each can have independent in-progress state without one tool's
+// pending vertices leaking into the other.
 let committed: Point[] = [];
 let cursorWorld: Point | null = null;
 let proto: Omit<PolylineVector, "points"> | null = null;
@@ -13,7 +16,9 @@ function setInProgress(ctx: ToolContext): void {
     return;
   }
   const previewPoints = cursorWorld ? [...committed, cursorWorld] : [...committed];
-  ctx.state.inProgress = { ...proto, points: previewPoints };
+  // Render the in-progress preview as a closed shape too so the user sees
+  // what they'll get on commit.
+  ctx.state.inProgress = { ...proto, points: previewPoints, closed: true };
 }
 
 function cancel(ctx: ToolContext): void {
@@ -25,21 +30,21 @@ function cancel(ctx: ToolContext): void {
 }
 
 function finalize(ctx: ToolContext): void {
-  if (!proto || committed.length < 2) {
+  if (!proto || committed.length < 3) {
+    // A closed polyline needs at least 3 distinct points to make sense.
     cancel(ctx);
     return;
   }
-  ctx.commitVector({ ...proto, points: committed.slice() });
+  ctx.commitVector({ ...proto, points: committed.slice(), closed: true });
   cancel(ctx);
 }
 
-export const polylineTool: Tool = {
-  id: "polyline",
+export const closedPolylineTool: Tool = {
+  id: "closed-polyline",
   cursor: "crosshair",
   onPointerDown(e, ctx) {
     const world = snap(ctx.state.view.pixelsToWorld(eventCanvasPoint(e)), ctx.state.snapToGrid);
-    // Double-click on second-or-later vertex finalizes
-    if (proto && committed.length >= 2 && e.detail >= 2) {
+    if (proto && committed.length >= 3 && e.detail >= 2) {
       finalize(ctx);
       return;
     }
@@ -68,8 +73,6 @@ export const polylineTool: Tool = {
     finalize(ctx);
   },
   onDoubleClick(_e, ctx) {
-    // Native dblclick — same finalize behaviour as middle-click. The first
-    // click of the pair already added a vertex; the dblclick just commits.
     finalize(ctx);
   },
   onKeyDown(e, ctx) {

@@ -319,6 +319,8 @@ export class CanvasRenderer {
           const p = view.worldToPixels(v.points[i]!);
           ctx.lineTo(p.x, p.y);
         }
+        // Closed polyline: connect last back to first.
+        if (v.kind === "polyline" && v.closed) ctx.closePath();
         ctx.stroke();
         break;
       }

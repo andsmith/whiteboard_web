@@ -24,7 +24,13 @@ export interface RectVector extends BaseVector {
   rotation?: number;
 }
 export interface CircleVector extends BaseVector { kind: "circle"; center: Point; radius: number; }
-export interface PolylineVector extends BaseVector { kind: "polyline"; points: Point[]; }
+export interface PolylineVector extends BaseVector {
+  kind: "polyline";
+  points: Point[];
+  /** When true, the last point connects back to the first at render time
+   * (forming a closed polygon). Default undefined = open polyline. */
+  closed?: boolean;
+}
 export interface TextVector extends BaseVector {
   kind: "text"; pos: Point; text: string; fontSize: number;
   /** Rotation in radians around `pos` (the top-left baseline anchor). */

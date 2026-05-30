@@ -3,7 +3,7 @@ import type { Vector } from "../vectors";
 
 export type ToolId =
   | "select" | "pan" | "modify"
-  | "pencil" | "line" | "rect" | "circle" | "text" | "polyline" | "latex";
+  | "pencil" | "line" | "rect" | "circle" | "text" | "polyline" | "closed-polyline" | "latex";
 
 export interface ToolContext {
   state: AppState;
@@ -28,6 +28,9 @@ export interface Tool {
   /** Middle-button click. If a tool implements this, it overrides the
    * default middle-click pan. */
   onMiddleClick?(e: PointerEvent, ctx: ToolContext): void;
+  /** Native browser dblclick event. Polyline / closed-polyline use it as
+   * an alternate way to finalize the in-progress shape. */
+  onDoubleClick?(e: MouseEvent, ctx: ToolContext): void;
 }
 
 /** Action button shown in the toolbar — unlike Tool, it does not become the

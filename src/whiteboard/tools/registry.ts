@@ -7,6 +7,7 @@ import { rectTool } from "./rect";
 import { circleTool } from "./circle";
 import { textTool } from "./text";
 import { polylineTool } from "./polyline";
+import { closedPolylineTool } from "./closedPolyline";
 import { latexTool } from "./latex";
 import type { Tool, ToolId, ActionDef, ActionId } from "./tool";
 
@@ -20,6 +21,7 @@ export const TOOLS: Record<ToolId, Tool> = {
   circle: circleTool,
   text: textTool,
   polyline: polylineTool,
+  "closed-polyline": closedPolylineTool,
   latex: latexTool,
 };
 
@@ -30,7 +32,7 @@ export const DRAW_TOOL_ORDER: ToolId[] = [
   "pencil", "line",
   "rect", "circle",
   "text", "latex",
-  "polyline",
+  "polyline", "closed-polyline",
 ];
 
 /** Action buttons in the toolbar — they don't become the active tool.
@@ -40,9 +42,9 @@ export const DRAW_TOOL_ORDER: ToolId[] = [
  * `host` (nav / draw) at render time. */
 export const ACTION_ORDER: ActionId[] = [
   "anchor-create",
-  "group-as-textish",
   "group",
   "ungroup",
+  "group-as-textish",
 ];
 
 export type { ActionDef };
