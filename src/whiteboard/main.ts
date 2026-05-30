@@ -20,6 +20,7 @@ import { generateRoomId, isValidRoomId } from "./room-id";
 import { getBoundingBox, type Vector } from "./vectors";
 import { scaleVector, getCenter } from "./vector-ops";
 import { PeerConnections, type DataMessage } from "./peer-connections";
+import { findHit } from "./hit-test";
 import type { Op } from "./vector-store";
 import { loadIceServers } from "./ice-config";
 import { DebugLog } from "./debug-log";
@@ -939,8 +940,30 @@ window.addEventListener("DOMContentLoaded", () => {
       }
       return;
     }
-    // Left button + Ctrl: pan override.
+    // Left button + Ctrl: in the select / modify tools, toggle the clicked
+    // vector's membership in the selection (no drag, no transform). On any
+    // other tool — or when clicking empty space — Ctrl-click falls through
+    // to the pan override.
     if (e.button === 0 && e.ctrlKey) {
+      const tool = state.currentTool;
+      if (tool === "select" || tool === "modify") {
+        const hit = findHit(
+          state.store.vectors.values(),
+          eventCanvasPos(e),
+          state.view,
+          canvas.getContext("2d") ?? undefined,
+        );
+        if (hit) {
+          e.preventDefault();
+          const next = new Set(state.selectedIds);
+          if (next.has(hit.id)) next.delete(hit.id);
+          else next.add(hit.id);
+          state.selectedIds = next;
+          invalidate();
+          return;
+        }
+      }
+      // Empty space (or non-select/modify tool): pan override.
       e.preventDefault();
       panLast = { x: e.clientX, y: e.clientY };
       canvas.style.cursor = "grabbing";
