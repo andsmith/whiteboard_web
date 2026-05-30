@@ -1003,6 +1003,15 @@ window.addEventListener("DOMContentLoaded", () => {
         invalidate();
       }
     }
+    // When Ctrl is held in select/modify, the cursor should preview the
+    // about-to-happen action: "pointer" over a vector (toggle), "grab" over
+    // empty space (pan). Without this the cursor stays "grab" everywhere
+    // which is misleading.
+    if (ctrlHeld && !panLast && (state.currentTool === "select" || state.currentTool === "modify")) {
+      const hit = findHit(state.store.vectors.values(), eventCanvasPos(e), state.view, canvas.getContext("2d") ?? undefined);
+      const desired = hit ? "pointer" : "grab";
+      if (canvas.style.cursor !== desired) canvas.style.cursor = desired;
+    }
     TOOLS[state.currentTool].onPointerMove?.(e, toolCtx);
   });
   canvas.addEventListener("pointerup", (e) => {
