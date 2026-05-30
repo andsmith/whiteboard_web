@@ -118,7 +118,7 @@ export function hitTest(
       const dx = screenPt.x - posPx.x;
       const dy = screenPt.y - posPx.y;
       const local: Point = { x: dx * cos - dy * sin, y: dx * sin + dy * cos };
-      const px = effectiveTextPx(v.fontSize, v.screenScale, view.zoom);
+      const px = effectiveTextPx(v.fontSize, view.zoom);
       const lines = v.text.split("\n");
       const lineHeight = px * 1.5;
       let maxWidth = 0;
@@ -149,7 +149,7 @@ export function hitTest(
       const dx = screenPt.x - posPx.x;
       const dy = screenPt.y - posPx.y;
       const local: Point = { x: dx * cos - dy * sin, y: dx * sin + dy * cos };
-      const px = effectiveTextPx(v.fontSize, v.screenScale, view.zoom);
+      const px = effectiveTextPx(v.fontSize, view.zoom);
       const lines = Math.max(1, v.text.split("\n").length);
       // Coarse rect approximating the rendered block (matches the placeholder).
       const w = px * Math.max(2, v.text.length * 0.5);
@@ -191,7 +191,7 @@ export function renderedBboxPx(
       return aabbOf(cornersWorld.map((p) => view.worldToPixels(p)));
     }
     case "text": {
-      const px = effectiveTextPx(v.fontSize, v.screenScale, view.zoom);
+      const px = effectiveTextPx(v.fontSize, view.zoom);
       const lineHeight = px * 1.5;
       const lines = v.text.split("\n");
       let maxWidth = 0;

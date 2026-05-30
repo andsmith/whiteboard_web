@@ -368,7 +368,7 @@ export class CanvasRenderer {
   private drawText(v: TextVector, override?: string): void {
     const ctx = this.ctx;
     const view = this.state.view;
-    const px = effectiveTextPx(v.fontSize, v.screenScale, view.zoom);
+    const px = effectiveTextPx(v.fontSize, view.zoom);
     ctx.font = `${px}px system-ui, -apple-system, sans-serif`;
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = override ?? v.color;
@@ -396,9 +396,7 @@ export class CanvasRenderer {
     ctx.save();
     ctx.translate(start.x, start.y);
     if (v.rotation) ctx.rotate(v.rotation);
-    // For world-scale latex we scale by zoom; for screen-scale we render at
-    // 1:1 so the math stays the same screen size at any zoom.
-    const scale = v.screenScale ? 1 : view.zoom;
+    const scale = view.zoom;
     if (cached) {
       // The image was rendered at fontSize world-pixels; drawing it at
       // (width*scale, height*scale) makes the rendered math the correct size.
@@ -428,7 +426,7 @@ export class CanvasRenderer {
     if (!visible) return;
     const ctx = this.ctx;
     const view = this.state.view;
-    const px = effectiveTextPx(v.fontSize, v.screenScale, view.zoom);
+    const px = effectiveTextPx(v.fontSize, view.zoom);
     ctx.font = `${px}px system-ui, -apple-system, sans-serif`;
     const lines = v.text.split("\n");
     const lastLine = lines[lines.length - 1] ?? "";

@@ -20,12 +20,21 @@ export const textTool: Tool = {
     if (e.button !== 0) return;
     commitCurrent(ctx);
     const world = snap(ctx.state.view.pixelsToWorld(eventCanvasPoint(e)), ctx.state.snapToGrid);
-    // state.fontSize is "screen pixels at the current zoom level".
-    //   - World-scale (default): vector stores fontSize / zoom so render =
-    //     world * zoom yields the chosen screen size only at this zoom.
-    //   - Screen-scale (constantTextScale=on): vector stores fontSize as-is
-    //     and renders without multiplying by zoom, so it stays constant.
-    const screenScale = ctx.state.constantTextScale;
+    // fontSize is ALWAYS world-space; the rendering path always uses
+    // fontSize * zoom. The two scaling modes differ only in how the stored
+    // world-fontSize is chosen at create time:
+    //
+    //   - Constant Text Scale (default): world-fontSize = dial * 3. Same
+    //     dial value → same world size regardless of authoring zoom, so two
+    //     "scale 12" labels authored at different zoom levels look the same
+    //     size relative to other vectors. The ×3 is the user-requested
+    //     bump so "scale 12" renders comfortably (≈ 36 px at zoom 1).
+    //   - Text Scales with Zoom: world-fontSize = dial / zoom. The dial
+    //     reads as screen pixels at the current zoom, but world size depends
+    //     on authoring zoom so different-zoom-authored text differs visually.
+    const fs = ctx.state.constantTextScale
+      ? ctx.state.fontSize * 3
+      : ctx.state.fontSize / Math.max(0.0001, ctx.state.view.zoom);
     const v: TextVector = {
       id: newVectorId(),
       kind: "text",
@@ -35,10 +44,7 @@ export const textTool: Tool = {
       createdAt: Date.now(),
       pos: world,
       text: "",
-      fontSize: screenScale
-        ? ctx.state.fontSize
-        : ctx.state.fontSize / Math.max(0.0001, ctx.state.view.zoom),
-      screenScale,
+      fontSize: fs,
     };
     ctx.state.textEditing = v;
     ctx.invalidate();

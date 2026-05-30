@@ -1,18 +1,24 @@
 import type { Tool, ToolContext } from "./tool";
 import { eventCanvasPoint } from "./tool";
 import { findHit } from "../hit-test";
-import { translateVector, scaleVector, rotateVector, getCenter, duplicateVector } from "../vector-ops";
+import { translateVector, scaleVector, rotateVector, duplicateVector } from "../vector-ops";
 import type { Vector } from "../vectors";
+import type { Op } from "../vector-store";
 import { snap, snapAngle, type Point } from "../view";
 
 type Mode = "idle" | "moving" | "menuOpen" | "rotating" | "scaling" | "placingDuplicate";
 
 let mode: Mode = "idle";
-let targetId: string | null = null;
-let original: Vector | null = null;
+/** Snapshot of every selected vector at the moment the action started, so
+ * the live drag can compute absolute deltas and the commit step can record
+ * proper replace ops. */
+let originals: Map<string, Vector> = new Map();
 /** World-space position of the initial click — used for absolute drag math. */
 let dragStartWorld: Point | null = null;
+/** Screen-space position where the radial menu was opened. */
 let menuPos: Point | null = null;
+/** Group anchor for rotate / scale: centroid of original group centers. */
+let groupAnchorWorld: Point | null = null;
 
 let rotateStartAngle = 0;
 let scaleStartY = 0;
@@ -53,8 +59,7 @@ function hitTestIcon(menuPos: Point, cursor: Point): RadialIconName | null {
   return null;
 }
 
-/** True iff this vector kind supports the "edit" radial action. */
-function canEdit(kind: string): boolean {
+function canEditKind(kind: string): boolean {
   return kind === "text" || kind === "latex";
 }
 
@@ -65,10 +70,10 @@ function getCanvasCtx(): CanvasRenderingContext2D | undefined {
 
 function reset(ctx: ToolContext): void {
   mode = "idle";
-  targetId = null;
-  original = null;
+  originals.clear();
   dragStartWorld = null;
   menuPos = null;
+  groupAnchorWorld = null;
   dupVectors = [];
   lastDragWorld = null;
   ctx.state.radialMenu = null;
@@ -77,9 +82,64 @@ function reset(ctx: ToolContext): void {
   ctx.invalidate();
 }
 
-function startPlacingDuplicate(ctx: ToolContext, source: Vector, screenPt: Point): void {
-  const copy = duplicateVector(source, ctx.getMyId());
-  dupVectors = [copy];
+/** Ensure the clicked vector is part of the active selection. If it's not,
+ * the selection is REPLACED with just this one vector (matching the user's
+ * "modify sets selection like a single-target select-crop" intent). If it
+ * IS already selected, the multi-selection is preserved so the whole group
+ * gets dragged / transformed. */
+function ensureSelectionIncludes(ctx: ToolContext, hit: Vector): void {
+  if (!ctx.state.selectedIds.has(hit.id)) {
+    ctx.state.selectedIds = new Set([hit.id]);
+  }
+}
+
+/** Snapshot every currently-selected vector into `originals`. */
+function captureOriginals(ctx: ToolContext): void {
+  originals.clear();
+  for (const id of ctx.state.selectedIds) {
+    const v = ctx.state.store.vectors.get(id);
+    if (v) originals.set(id, v);
+  }
+}
+
+/** Group anchor = centroid of selected vectors' bounding-box centers. Used
+ * as the pivot for group rotate and group scale. */
+function computeGroupAnchor(): Point | null {
+  if (originals.size === 0) return null;
+  let sx = 0, sy = 0, n = 0;
+  for (const v of originals.values()) {
+    const c = centerOf(v);
+    sx += c.x; sy += c.y; n++;
+  }
+  return n === 0 ? null : { x: sx / n, y: sy / n };
+}
+
+function centerOf(v: Vector): Point {
+  // Avoid importing getCenter from vector-ops just for one call.
+  switch (v.kind) {
+    case "pencil":
+    case "polyline": {
+      let sx = 0, sy = 0;
+      for (const p of v.points) { sx += p.x; sy += p.y; }
+      const n = v.points.length || 1;
+      return { x: sx / n, y: sy / n };
+    }
+    case "line":
+    case "rect":
+      return { x: (v.a.x + v.b.x) / 2, y: (v.a.y + v.b.y) / 2 };
+    case "circle":
+      return { ...v.center };
+    case "text":
+    case "latex":
+      return { x: v.pos.x, y: v.pos.y - v.fontSize / 2 };
+  }
+}
+
+function startPlacingDuplicate(ctx: ToolContext, screenPt: Point): void {
+  const author = ctx.getMyId();
+  dupVectors = [];
+  for (const v of originals.values()) dupVectors.push(duplicateVector(v, author));
+  if (dupVectors.length === 0) { reset(ctx); return; }
   lastDragWorld = ctx.state.view.pixelsToWorld(screenPt);
   ctx.state.placingDuplicates = dupVectors.slice();
   mode = "placingDuplicate";
@@ -88,22 +148,22 @@ function startPlacingDuplicate(ctx: ToolContext, source: Vector, screenPt: Point
 
 function commitPlacingDuplicate(ctx: ToolContext): void {
   if (dupVectors.length === 0) { reset(ctx); return; }
-  const ops = dupVectors.map((v) => ({ kind: "add" as const, vector: v }));
-  ctx.state.store.applyAndRecord(ops.length === 1
-    ? ops[0]!
-    : { kind: "batch", ops });
+  const ops: Op[] = dupVectors.map((v) => ({ kind: "add", vector: v }));
+  ctx.state.store.applyAndRecord(ops.length === 1 ? ops[0]! : { kind: "batch", ops });
+  // The freshly-placed copies become the new selection so the user can
+  // immediately drag/transform them as a group again.
+  ctx.state.selectedIds = new Set(dupVectors.map((v) => v.id));
   reset(ctx);
 }
 
-/** Open a text or latex vector for editing via the radial "edit" action.
- * Removes the vector from the store (so only the in-progress copy is visible)
- * and stashes the original on state.editingOriginal so Escape can restore it.
- * Then switches to the appropriate tool. The actual edit UI is the existing
- * in-canvas cursor (text) or the bottom-bar input (latex). */
-function openEdit(ctx: ToolContext, v: Vector): void {
+/** Edit only fires when EXACTLY one text/latex vector is selected. */
+function tryOpenEdit(ctx: ToolContext): void {
+  if (ctx.state.selectedIds.size !== 1) { reset(ctx); return; }
+  const id = ctx.state.selectedIds.values().next().value;
+  if (!id) { reset(ctx); return; }
+  const v = ctx.state.store.vectors.get(id);
+  if (!v || !canEditKind(v.kind)) { reset(ctx); return; }
   ctx.state.editingOriginal = v;
-  // Remove from store but DON'T record — we'll record either an add (Escape)
-  // or the new edited version (commit). Either way the original is gone.
   ctx.state.store.apply({ kind: "delete", vector: v });
   if (v.kind === "text") {
     ctx.state.textEditing = { ...v, text: v.text };
@@ -118,53 +178,92 @@ function openEdit(ctx: ToolContext, v: Vector): void {
   }
 }
 
-function openRadialMenu(ctx: ToolContext, hit: Vector, screenPt: Point, pointerId: number, target: EventTarget | null): void {
+/** Apply the active transform mode (rotate/scale) to every vector in
+ * `originals`, given the live cursor position. Used both during the drag and
+ * implicitly via the wheel inverse-scale hook. */
+function applyGroupRotate(ctx: ToolContext, screenPt: Point, shiftKey: boolean): void {
+  if (!groupAnchorWorld) return;
+  const worldNow = ctx.state.view.pixelsToWorld(screenPt);
+  const angleNow = Math.atan2(worldNow.y - groupAnchorWorld.y, worldNow.x - groupAnchorWorld.x);
+  let delta = angleNow - rotateStartAngle;
+  if (shiftKey) delta = snapAngle(delta, true);
+  for (const [id, orig] of originals) {
+    const rotated = rotateVector(orig, delta, groupAnchorWorld);
+    const current = ctx.state.store.vectors.get(id);
+    if (current) ctx.state.store.apply({ kind: "replace", before: current, after: rotated });
+  }
+}
+
+function applyGroupScale(ctx: ToolContext, screenPt: Point): void {
+  if (!groupAnchorWorld) return;
+  const dy = scaleStartY - screenPt.y;
+  const factor = Math.max(0.05, Math.pow(1.01, dy));
+  for (const [id, orig] of originals) {
+    const scaled = scaleVector(orig, factor, groupAnchorWorld);
+    const current = ctx.state.store.vectors.get(id);
+    if (current) ctx.state.store.apply({ kind: "replace", before: current, after: scaled });
+  }
+}
+
+function commitTransformBatch(ctx: ToolContext): void {
+  const me = ctx.getMyId();
+  const ops: Op[] = [];
+  for (const [id, before] of originals) {
+    const current = ctx.state.store.vectors.get(id);
+    if (current && current !== before) {
+      const after = { ...current, lastEditor: me };
+      ctx.state.store.vectors.set(after.id, after);
+      ops.push({ kind: "replace", before, after });
+    }
+  }
+  if (ops.length > 0) {
+    ctx.state.store.recordOnly(ops.length === 1 ? ops[0]! : { kind: "batch", ops });
+  }
+}
+
+function revertTransform(ctx: ToolContext): void {
+  for (const [id, before] of originals) {
+    const current = ctx.state.store.vectors.get(id);
+    if (current) ctx.state.store.apply({ kind: "replace", before: current, after: before });
+  }
+}
+
+function deleteSelection(ctx: ToolContext): void {
+  const ops: Op[] = [];
+  for (const id of ctx.state.selectedIds) {
+    const v = ctx.state.store.vectors.get(id);
+    if (v) ops.push({ kind: "delete", vector: v });
+  }
+  if (ops.length > 0) {
+    ctx.state.store.applyAndRecord(ops.length === 1 ? ops[0]! : { kind: "batch", ops });
+  }
+  ctx.state.selectedIds.clear();
+}
+
+function openRadialMenu(
+  ctx: ToolContext, hit: Vector, screenPt: Point, pointerId: number, target: EventTarget | null,
+): void {
+  ensureSelectionIncludes(ctx, hit);
+  captureOriginals(ctx);
+  groupAnchorWorld = computeGroupAnchor();
   mode = "menuOpen";
-  targetId = hit.id;
-  original = hit;
   menuPos = screenPt;
   ctx.state.radialMenu = { pos: screenPt, targetId: hit.id, hoverIcon: null };
   (target as Element | null)?.setPointerCapture?.(pointerId);
   ctx.invalidate();
 }
 
-function startMove(ctx: ToolContext, hit: Vector, screenPt: Point, pointerId: number, target: EventTarget | null): void {
+function startMove(
+  ctx: ToolContext, hit: Vector, screenPt: Point, pointerId: number, target: EventTarget | null,
+): void {
+  ensureSelectionIncludes(ctx, hit);
+  captureOriginals(ctx);
   mode = "moving";
-  targetId = hit.id;
-  original = hit;
   dragStartWorld = ctx.state.view.pixelsToWorld(screenPt);
-  ctx.state.dragLockedTargetId = hit.id;
+  // Wheel-inverse-scale hook only makes sense for a single-vector drag.
+  ctx.state.dragLockedTargetId = originals.size === 1 ? hit.id : null;
   (target as Element | null)?.setPointerCapture?.(pointerId);
   ctx.invalidate();
-}
-
-function startRotate(ctx: ToolContext, hit: Vector, screenPt: Point): void {
-  mode = "rotating";
-  targetId = hit.id;
-  original = hit;
-  const center = getCenter(hit);
-  const worldNow = ctx.state.view.pixelsToWorld(screenPt);
-  rotateStartAngle = Math.atan2(worldNow.y - center.y, worldNow.x - center.x);
-  ctx.invalidate();
-}
-
-function startScale(ctx: ToolContext, hit: Vector, screenPt: Point): void {
-  mode = "scaling";
-  targetId = hit.id;
-  original = hit;
-  scaleStartY = screenPt.y;
-  ctx.invalidate();
-}
-
-function commitTransform(ctx: ToolContext): void {
-  if (!targetId || !original) return;
-  const current = ctx.state.store.vectors.get(targetId);
-  if (current && current !== original) {
-    // Stamp the current user as lastEditor on the committed shape.
-    const final = { ...current, lastEditor: ctx.getMyId() };
-    ctx.state.store.vectors.set(final.id, final);
-    ctx.state.store.recordOnly({ kind: "replace", before: original, after: final });
-  }
 }
 
 export const modifyTool: Tool = {
@@ -175,7 +274,7 @@ export const modifyTool: Tool = {
     if (e.button !== 0) return;
     const screenPt = eventCanvasPoint(e);
 
-    // Placing-duplicate mode: left-click anywhere commits the placement.
+    // Placing-duplicate: left-click commits the placement.
     if (mode === "placingDuplicate") {
       e.preventDefault();
       commitPlacingDuplicate(ctx);
@@ -184,7 +283,7 @@ export const modifyTool: Tool = {
 
     // If in a continuation mode, a click commits.
     if (mode === "rotating" || mode === "scaling") {
-      commitTransform(ctx);
+      commitTransformBatch(ctx);
       reset(ctx);
       return;
     }
@@ -192,7 +291,7 @@ export const modifyTool: Tool = {
     const hit = findHit(ctx.state.store.vectors.values(), screenPt, ctx.state.view, getCanvasCtx());
     if (!hit) return;
 
-    // Shift+left-click → radial menu (same as middle-click via onMiddleClick)
+    // Shift+left-click → radial menu (same as middle-click via onMiddleClick).
     if (e.shiftKey) {
       e.preventDefault();
       openRadialMenu(ctx, hit, screenPt, e.pointerId, e.target);
@@ -201,9 +300,10 @@ export const modifyTool: Tool = {
 
     startMove(ctx, hit, screenPt, e.pointerId, e.target);
   },
+
   onMiddleClick(e, ctx) {
     if (mode === "rotating" || mode === "scaling") {
-      commitTransform(ctx);
+      commitTransformBatch(ctx);
       reset(ctx);
       return;
     }
@@ -241,19 +341,18 @@ export const modifyTool: Tool = {
       return;
     }
 
-    if (mode === "moving" && targetId && original && dragStartWorld) {
-      // Absolute drag: translation = (target click-point) - (initial click-point).
-      // Shift-hold snaps the click-point to the grid so the object lands cleanly.
+    if (mode === "moving" && dragStartWorld) {
+      // Absolute group drag against captured originals.
       const worldNow = ctx.state.view.pixelsToWorld(screenPt);
       const targetClick = e.shiftKey ? snap(worldNow, true) : worldNow;
       const dx = targetClick.x - dragStartWorld.x;
       const dy = targetClick.y - dragStartWorld.y;
-      const moved = translateVector(original, dx, dy);
-      const current = ctx.state.store.vectors.get(targetId);
-      if (current) {
-        ctx.state.store.apply({ kind: "replace", before: current, after: moved });
-        ctx.invalidate();
+      for (const [id, orig] of originals) {
+        const moved = translateVector(orig, dx, dy);
+        const current = ctx.state.store.vectors.get(id);
+        if (current) ctx.state.store.apply({ kind: "replace", before: current, after: moved });
       }
+      ctx.invalidate();
       return;
     }
 
@@ -266,76 +365,52 @@ export const modifyTool: Tool = {
       return;
     }
 
-    if (mode === "rotating" && targetId && original) {
-      const worldNow = ctx.state.view.pixelsToWorld(screenPt);
-      const center = getCenter(original);
-      const angleNow = Math.atan2(worldNow.y - center.y, worldNow.x - center.x);
-      let delta = angleNow - rotateStartAngle;
-      if (e.shiftKey) delta = snapAngle(delta, true); // snap to 45°
-      const rotated = rotateVector(original, delta, center);
-      const current = ctx.state.store.vectors.get(targetId);
-      if (current) {
-        ctx.state.store.apply({ kind: "replace", before: current, after: rotated });
-        ctx.invalidate();
-      }
+    if (mode === "rotating") {
+      applyGroupRotate(ctx, screenPt, e.shiftKey);
+      ctx.invalidate();
       return;
     }
 
-    if (mode === "scaling" && targetId && original) {
-      const dy = scaleStartY - screenPt.y;
-      const factor = Math.max(0.05, Math.pow(1.01, dy));
-      const center = getCenter(original);
-      const scaled = scaleVector(original, factor, center);
-      const current = ctx.state.store.vectors.get(targetId);
-      if (current) {
-        ctx.state.store.apply({ kind: "replace", before: current, after: scaled });
-        ctx.invalidate();
-      }
+    if (mode === "scaling") {
+      applyGroupScale(ctx, screenPt);
+      ctx.invalidate();
       return;
     }
   },
 
   onPointerUp(e, ctx) {
     if (mode === "moving") {
-      commitTransform(ctx);
+      commitTransformBatch(ctx);
       reset(ctx);
       return;
     }
     if (mode === "menuOpen" && menuPos) {
       const screenPt = eventCanvasPoint(e);
       const icon = hitTestIcon(menuPos, screenPt);
-      if (icon === "delete" && targetId) {
-        const v = ctx.state.store.vectors.get(targetId);
-        if (v) ctx.state.store.applyAndRecord({ kind: "delete", vector: v });
+      if (icon === "delete") {
+        deleteSelection(ctx);
         reset(ctx);
-      } else if (icon === "rotate" && targetId) {
-        const v = ctx.state.store.vectors.get(targetId);
-        if (v) {
-          ctx.state.radialMenu = null;
-          startRotate(ctx, v, screenPt);
-        } else reset(ctx);
-      } else if (icon === "scale" && targetId) {
-        const v = ctx.state.store.vectors.get(targetId);
-        if (v) {
-          ctx.state.radialMenu = null;
-          startScale(ctx, v, screenPt);
-        } else reset(ctx);
-      } else if (icon === "duplicate" && targetId) {
-        const v = ctx.state.store.vectors.get(targetId);
-        if (v) {
-          ctx.state.radialMenu = null;
-          (e.target as Element | null)?.releasePointerCapture?.(e.pointerId);
-          startPlacingDuplicate(ctx, v, screenPt);
-        } else reset(ctx);
-      } else if (icon === "edit" && targetId) {
-        const v = ctx.state.store.vectors.get(targetId);
-        if (v && canEdit(v.kind)) {
-          (e.target as Element | null)?.releasePointerCapture?.(e.pointerId);
-          openEdit(ctx, v);
-        } else {
-          // Edit unsupported for this vector kind — silently dismiss the menu.
-          reset(ctx);
+      } else if (icon === "rotate") {
+        // Enter continuation rotate mode against the captured originals.
+        if (groupAnchorWorld) {
+          const cw = ctx.state.view.pixelsToWorld(screenPt);
+          rotateStartAngle = Math.atan2(cw.y - groupAnchorWorld.y, cw.x - groupAnchorWorld.x);
         }
+        ctx.state.radialMenu = null;
+        mode = "rotating";
+        ctx.invalidate();
+      } else if (icon === "scale") {
+        scaleStartY = screenPt.y;
+        ctx.state.radialMenu = null;
+        mode = "scaling";
+        ctx.invalidate();
+      } else if (icon === "duplicate") {
+        ctx.state.radialMenu = null;
+        (e.target as Element | null)?.releasePointerCapture?.(e.pointerId);
+        startPlacingDuplicate(ctx, screenPt);
+      } else if (icon === "edit") {
+        (e.target as Element | null)?.releasePointerCapture?.(e.pointerId);
+        tryOpenEdit(ctx);
       } else {
         reset(ctx);
       }
@@ -347,44 +422,23 @@ export const modifyTool: Tool = {
   onKeyDown(e, ctx) {
     if (e.key === "Escape") {
       if (mode === "rotating" || mode === "scaling") {
-        // revert to original
-        if (targetId && original) {
-          const current = ctx.state.store.vectors.get(targetId);
-          if (current) ctx.state.store.apply({ kind: "replace", before: current, after: original });
-        }
+        revertTransform(ctx);
         reset(ctx);
         e.preventDefault();
       } else if (mode === "menuOpen") {
         reset(ctx);
         e.preventDefault();
       } else if (mode === "placingDuplicate") {
-        // Discard the duplicates — they were never added to the store.
         reset(ctx);
         e.preventDefault();
       }
       return;
     }
-    if (e.key === "Delete" || e.key === "Backspace") {
-      // Quick delete: if a vector is hovered (and not in another mode), delete it.
-      if (mode === "idle" && ctx.state.hoverId) {
-        const v = ctx.state.store.vectors.get(ctx.state.hoverId);
-        if (v) ctx.state.store.applyAndRecord({ kind: "delete", vector: v });
-        ctx.state.hoverId = null;
-        ctx.invalidate();
-        e.preventDefault();
-      }
-    }
+    // (Global Delete/Backspace handler covers selection deletion in main.ts.)
   },
 
   onDeselect(ctx) {
-    if (mode === "rotating" || mode === "scaling") {
-      // Revert mid-transform if user switches tools.
-      if (targetId && original) {
-        const current = ctx.state.store.vectors.get(targetId);
-        if (current) ctx.state.store.apply({ kind: "replace", before: current, after: original });
-      }
-    }
-    // placingDuplicate: silently discard the unplaced copies.
+    if (mode === "rotating" || mode === "scaling") revertTransform(ctx);
     ctx.state.hoverId = null;
     reset(ctx);
   },

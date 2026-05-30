@@ -29,18 +29,12 @@ export interface TextVector extends BaseVector {
   kind: "text"; pos: Point; text: string; fontSize: number;
   /** Rotation in radians around `pos` (the top-left baseline anchor). */
   rotation?: number;
-  /** When true, `fontSize` is interpreted as SCREEN pixels (constant size
-   * regardless of zoom). When false/undefined, `fontSize` is world-space
-   * (scales with zoom). Default = false to preserve existing semantics. */
-  screenScale?: boolean;
 }
 
 export interface LatexVector extends BaseVector {
   kind: "latex"; pos: Point; text: string; fontSize: number;
   /** Rotation in radians around `pos` (top-left anchor of the rendered block). */
   rotation?: number;
-  /** Same screen/world-scale switch as TextVector. */
-  screenScale?: boolean;
 }
 
 export type Vector = PencilVector | LineVector | RectVector | CircleVector | PolylineVector | TextVector | LatexVector;
@@ -50,11 +44,12 @@ export function newVectorId(): string {
     ?? `v-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/** Effective screen-pixel size of a text/latex vector, accounting for the
- * screenScale flag. Clamped to a readable minimum so very small text doesn't
- * disappear in world-scale mode at low zoom. */
-export function effectiveTextPx(fontSize: number, screenScale: boolean | undefined, zoom: number): number {
-  return screenScale ? Math.max(8, fontSize) : Math.max(8, fontSize * zoom);
+/** Effective screen-pixel size of a text/latex vector. fontSize is always
+ * world-space — the scaling MODE only affects how fontSize is chosen at
+ * creation, not how it's rendered. Clamped to a readable minimum so very
+ * small text doesn't disappear at low zoom. */
+export function effectiveTextPx(fontSize: number, zoom: number): number {
+  return Math.max(8, fontSize * zoom);
 }
 
 export function getBoundingBox(v: Vector): { minX: number; minY: number; maxX: number; maxY: number } {
