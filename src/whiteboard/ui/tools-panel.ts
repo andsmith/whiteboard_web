@@ -1,6 +1,6 @@
 import type { AppState, ColorHex } from "../app-state";
 import { COLORS } from "../app-state";
-import type { ToolId, ActionDef, ActionId } from "../tools/tool";
+import type { ToolId, ActionDef, ActionId, ToolContext } from "../tools/tool";
 import { NAV_TOOL_ORDER, DRAW_TOOL_ORDER, ACTION_ORDER } from "../tools/registry";
 import { ICONS } from "./icons";
 
@@ -11,6 +11,10 @@ export interface ToolsPanelHandle {
 export function mountToolsPanel(opts: {
   state: AppState;
   actions: Record<ActionId, ActionDef>;
+  /** ToolContext provider — used by the dynamic title/icon callbacks on
+   * each panel refresh so e.g. "Group as Text/LaTeX" can swap label and
+   * glyph based on the current selection. */
+  getCtx: () => ToolContext;
   onToolChange: (t: ToolId) => void;
   onColorChange: (c: ColorHex) => void;
   onAction: (id: ActionId) => void;
@@ -49,11 +53,14 @@ export function mountToolsPanel(opts: {
     navHost.appendChild(homeBtn);
   }
 
-  // Action buttons — sit in the nav grid below the home button. Same
-  // visual style as tools, but clicking doesn't change currentTool.
-  if (navHost) {
+  // Action buttons — partitioned by host. Nav actions sit in the nav grid
+  // below the home button (anchor-create). Draw actions sit in the draw
+  // grid after polyline (group-as-textish, group, ungroup).
+  const renderActions = (host: HTMLElement | null, which: "nav" | "draw") => {
+    if (!host) return;
     for (const id of ACTION_ORDER) {
       const def = opts.actions[id];
+      if (def.host !== which) continue;
       const btn = document.createElement("button");
       btn.className = "tool-btn action-btn";
       btn.dataset.action = id;
@@ -63,9 +70,11 @@ export function mountToolsPanel(opts: {
         if (opts.isActionDisabled(id)) return;
         opts.onAction(id);
       });
-      navHost.appendChild(btn);
+      host.appendChild(btn);
     }
-  }
+  };
+  renderActions(navHost, "nav");
+  renderActions(drawHost, "draw");
 
   if (colorsHost) {
     colorsHost.innerHTML = "";
@@ -88,12 +97,26 @@ export function mountToolsPanel(opts: {
         }
       });
     });
-    navHost?.querySelectorAll<HTMLButtonElement>(".action-btn").forEach((b) => {
-      const id = b.dataset.action as ActionId | undefined;
-      if (!id) return;
-      const disabled = opts.isActionDisabled(id);
-      b.classList.toggle("disabled", disabled);
-      b.disabled = disabled;
+    // Action buttons in BOTH hosts — refresh disabled state plus dynamic
+    // tooltip/icon per the action's iconFor/titleFor callbacks.
+    [navHost, drawHost].forEach((host) => {
+      host?.querySelectorAll<HTMLButtonElement>(".action-btn").forEach((b) => {
+        const id = b.dataset.action as ActionId | undefined;
+        if (!id) return;
+        const def = opts.actions[id];
+        const ctx = opts.getCtx();
+        const disabled = opts.isActionDisabled(id);
+        b.classList.toggle("disabled", disabled);
+        b.disabled = disabled;
+        if (def.titleFor) b.title = def.titleFor(ctx);
+        if (def.iconFor) {
+          const iconId = def.iconFor(ctx);
+          if (b.dataset.iconId !== iconId) {
+            b.innerHTML = ICONS[iconId] ?? "";
+            b.dataset.iconId = iconId;
+          }
+        }
+      });
     });
     colorsHost?.querySelectorAll<HTMLButtonElement>(".color-btn").forEach((b) => {
       b.classList.toggle("selected", b.dataset.color === opts.state.color);

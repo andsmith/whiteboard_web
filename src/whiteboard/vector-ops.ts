@@ -6,8 +6,19 @@ import type { Point } from "./view";
  * Geometry is shared safely: we route through translateVector(0,0) which
  * already clones the point arrays. The duplicator is the new vector's
  * author (so copying someone else's shape makes you its creator) AND its
- * lastEditor. */
+ * lastEditor. For groups, every child is recursively duplicated so each
+ * gets its own fresh id. */
 export function duplicateVector(v: Vector, author: string): Vector {
+  if (v.kind === "group") {
+    return {
+      ...v,
+      id: newVectorId(),
+      createdAt: Date.now(),
+      author,
+      lastEditor: author,
+      children: v.children.map((c) => duplicateVector(c, author)),
+    };
+  }
   const cloned = translateVector(v, 0, 0);
   return { ...cloned, id: newVectorId(), createdAt: Date.now(), author, lastEditor: author };
 }
@@ -26,6 +37,8 @@ export function translateVector(v: Vector, dx: number, dy: number): Vector {
     case "text":
     case "latex":
       return { ...v, pos: t(v.pos) };
+    case "group":
+      return { ...v, children: v.children.map((c) => translateVector(c, dx, dy)) };
   }
 }
 
@@ -46,6 +59,8 @@ export function scaleVector(v: Vector, factor: number, anchor: Point): Vector {
     case "text":
     case "latex":
       return { ...v, pos: s(v.pos), fontSize: v.fontSize * factor };
+    case "group":
+      return { ...v, children: v.children.map((c) => scaleVector(c, factor, anchor)) };
   }
 }
 
@@ -87,6 +102,8 @@ export function rotateVector(v: Vector, angleRad: number, center: Point): Vector
       // Translate the anchor point and accumulate rotation.
       return { ...v, pos: r(v.pos), rotation: (v.rotation ?? 0) + angleRad };
     }
+    case "group":
+      return { ...v, children: v.children.map((c) => rotateVector(c, angleRad, center)) };
   }
 }
 
@@ -107,5 +124,14 @@ export function getCenter(v: Vector): Point {
     case "text":
     case "latex":
       return { x: v.pos.x, y: v.pos.y - v.fontSize / 2 };
+    case "group": {
+      if (v.children.length === 0) return { x: 0, y: 0 };
+      let sx = 0, sy = 0;
+      for (const c of v.children) {
+        const cc = getCenter(c);
+        sx += cc.x; sy += cc.y;
+      }
+      return { x: sx / v.children.length, y: sy / v.children.length };
+    }
   }
 }

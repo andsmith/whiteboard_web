@@ -33,4 +33,16 @@ export const ICONS: Record<string, string> = {
 
   // Text-scale-mode toggle: "A" inside a fixed frame (constant size).
   "textscale-const": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><text x="6" y="18" font-family="serif" font-size="14" font-weight="700" fill="currentColor" stroke="none">A</text></svg>`,
+
+  // Group: two overlapping rounded rectangles bound by a brace at the top.
+  group: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="9" height="9" rx="1.5"/><rect x="11" y="11" width="9" height="9" rx="1.5"/><path d="M3 6c0-1 1-2 2-2h14c1 0 2 1 2 2"/></svg>`,
+
+  // Ungroup: two rectangles separating with a dashed bridge between them.
+  ungroup: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="9" width="7" height="7" rx="1.5"/><rect x="15" y="9" width="7" height="7" rx="1.5"/><path d="M9 12.5h6" stroke-dasharray="1.5 2"/><path d="M11 10l-2 2.5 2 2.5" stroke-linejoin="round"/><path d="M13 10l2 2.5-2 2.5"/></svg>`,
+
+  // Group-as-text: stacked "Aa" with a small downward merge arrow.
+  "group-as-text": `<svg viewBox="0 0 24 24" fill="currentColor"><text x="3" y="11" font-family="serif" font-size="10" font-weight="700">A</text><text x="11" y="11" font-family="serif" font-size="10" font-weight="700">a</text><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13v6"/><path d="M9.5 16.5l2.5 2.5 2.5-2.5"/></g><text x="6" y="23" font-family="serif" font-size="6" font-weight="600">Aa</text></svg>`,
+
+  // Group-as-latex: stacked italic "Lx" with same merge arrow.
+  "group-as-latex": `<svg viewBox="0 0 24 24" fill="currentColor"><text x="3" y="11" font-family="serif" font-size="10" font-weight="700" font-style="italic">L</text><text x="11" y="11" font-family="serif" font-size="9" font-weight="500" font-style="italic">x</text><g fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 13v6"/><path d="M9.5 16.5l2.5 2.5 2.5-2.5"/></g><text x="6" y="23" font-family="serif" font-size="6" font-weight="600" font-style="italic">Lx</text></svg>`,
 };

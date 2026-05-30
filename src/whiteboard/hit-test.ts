@@ -163,6 +163,13 @@ export function hitTest(
         local.y >= minY - padY && local.y <= maxY + padY
       );
     }
+    case "group": {
+      // Group is hit if any child is hit.
+      for (const c of v.children) {
+        if (hitTest(c, screenPt, view, ctx)) return true;
+      }
+      return false;
+    }
   }
 }
 
@@ -216,6 +223,19 @@ export function renderedBboxPx(
         x: posPx.x + p.x * cos - p.y * sin,
         y: posPx.y + p.x * sin + p.y * cos,
       })));
+    }
+    case "group": {
+      // Union of children's rendered bounding boxes.
+      if (v.children.length === 0) return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const c of v.children) {
+        const b = renderedBboxPx(c, view, ctx);
+        if (b.minX < minX) minX = b.minX;
+        if (b.minY < minY) minY = b.minY;
+        if (b.maxX > maxX) maxX = b.maxX;
+        if (b.maxY > maxY) maxY = b.maxY;
+      }
+      return { minX, minY, maxX, maxY };
     }
     default:
       return bboxPx(v, view, ctx);

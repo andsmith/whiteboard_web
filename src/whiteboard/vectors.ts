@@ -1,6 +1,6 @@
 import type { Point } from "./view";
 
-export type VectorKind = "pencil" | "line" | "rect" | "circle" | "polyline" | "text" | "latex";
+export type VectorKind = "pencil" | "line" | "rect" | "circle" | "polyline" | "text" | "latex" | "group";
 
 export interface BaseVector {
   id: string;
@@ -37,7 +37,15 @@ export interface LatexVector extends BaseVector {
   rotation?: number;
 }
 
-export type Vector = PencilVector | LineVector | RectVector | CircleVector | PolylineVector | TextVector | LatexVector;
+export interface GroupVector extends BaseVector {
+  kind: "group";
+  /** Children stored in absolute world coordinates. Nested groups allowed.
+   * Order is preserved; the renderer walks children in this order so later
+   * entries draw on top. */
+  children: Vector[];
+}
+
+export type Vector = PencilVector | LineVector | RectVector | CircleVector | PolylineVector | TextVector | LatexVector | GroupVector;
 
 export function newVectorId(): string {
   return (crypto as Crypto & { randomUUID?: () => string }).randomUUID?.()
@@ -88,6 +96,20 @@ export function getBoundingBox(v: Vector): { minX: number; minY: number; maxX: n
         maxX: v.pos.x + v.fontSize * 5,
         maxY: v.pos.y + v.fontSize * 1.5 * (lines - 1),
       };
+    }
+    case "group": {
+      if (v.children.length === 0) {
+        return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+      }
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const c of v.children) {
+        const b = getBoundingBox(c);
+        if (b.minX < minX) minX = b.minX;
+        if (b.minY < minY) minY = b.minY;
+        if (b.maxX > maxX) maxX = b.maxX;
+        if (b.maxY > maxY) maxY = b.maxY;
+      }
+      return { minX, minY, maxX, maxY };
     }
   }
 }

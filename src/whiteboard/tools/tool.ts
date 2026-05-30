@@ -33,13 +33,24 @@ export interface Tool {
 /** Action button shown in the toolbar — unlike Tool, it does not become the
  * active pointer-tool when clicked. Clicking just fires onClick (e.g., opens
  * a dialog). Used for the "create anchor" button. */
-export type ActionId = "anchor-create";
+export type ActionId = "anchor-create" | "group" | "ungroup" | "group-as-textish";
+
+/** Which toolbar host the button lives in. */
+export type ActionHost = "nav" | "draw";
 
 export interface ActionDef {
   id: ActionId;
-  /** Key into the icons.ts ICONS map. */
+  /** Which host (nav-tools or draw-tools) renders this button. */
+  host: ActionHost;
+  /** Default key into the icons.ts ICONS map. May be overridden per-update
+   * via the dynamic `iconFor(ctx)` callback. */
   iconId: string;
+  /** Default mouseover tooltip. May be overridden per-update via `titleFor`. */
   title: string;
+  /** Optional: dynamic icon override evaluated on every panel refresh. */
+  iconFor?(ctx: ToolContext): string;
+  /** Optional: dynamic title override evaluated on every panel refresh. */
+  titleFor?(ctx: ToolContext): string;
   /** Returns true if the action is currently disabled (e.g., view-only user
    * trying to use an editor-only action). */
   isDisabled?(ctx: ToolContext): boolean;

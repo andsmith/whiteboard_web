@@ -361,6 +361,13 @@ export class CanvasRenderer {
         this.drawLatex(v, opts.override);
         break;
       }
+      case "group": {
+        // Recurse: render every child with the same opts so selection /
+        // hover / highlight overrides propagate uniformly.
+        ctx.restore();
+        for (const c of v.children) this.drawVector(c, opts);
+        return;
+      }
     }
     ctx.restore();
   }

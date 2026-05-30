@@ -1,7 +1,7 @@
 import type { Tool, ToolContext } from "./tool";
 import { eventCanvasPoint } from "./tool";
 import { findHit } from "../hit-test";
-import { translateVector, scaleVector, rotateVector, duplicateVector } from "../vector-ops";
+import { translateVector, scaleVector, rotateVector, duplicateVector, getCenter } from "../vector-ops";
 import type { Vector } from "../vectors";
 import type { Op } from "../vector-store";
 import { snap, snapAngle, type Point } from "../view";
@@ -115,24 +115,7 @@ function computeGroupAnchor(): Point | null {
 }
 
 function centerOf(v: Vector): Point {
-  // Avoid importing getCenter from vector-ops just for one call.
-  switch (v.kind) {
-    case "pencil":
-    case "polyline": {
-      let sx = 0, sy = 0;
-      for (const p of v.points) { sx += p.x; sy += p.y; }
-      const n = v.points.length || 1;
-      return { x: sx / n, y: sy / n };
-    }
-    case "line":
-    case "rect":
-      return { x: (v.a.x + v.b.x) / 2, y: (v.a.y + v.b.y) / 2 };
-    case "circle":
-      return { ...v.center };
-    case "text":
-    case "latex":
-      return { x: v.pos.x, y: v.pos.y - v.fontSize / 2 };
-  }
+  return getCenter(v);
 }
 
 function startPlacingDuplicate(ctx: ToolContext, screenPt: Point): void {

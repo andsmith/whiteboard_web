@@ -17,7 +17,7 @@ import { mountLatexInput } from "./ui/latex-input";
 import { renderLatex } from "./latex-render";
 import { RoomManager } from "./room-manager";
 import { generateRoomId, isValidRoomId } from "./room-id";
-import { getBoundingBox, type Vector } from "./vectors";
+import { getBoundingBox, newVectorId, type Vector, type GroupVector } from "./vectors";
 import { scaleVector, getCenter } from "./vector-ops";
 import { PeerConnections, type DataMessage } from "./peer-connections";
 import { findHit } from "./hit-test";
@@ -133,16 +133,52 @@ window.addEventListener("DOMContentLoaded", () => {
   const actions: Record<ActionId, ActionDef> = {
     "anchor-create": {
       id: "anchor-create",
+      host: "nav",
       iconId: "anchor",
       title: "Save anchor (bookmark this view)",
       isDisabled: () => room.myPerm() === "view",
       onClick: () => { void createAnchorFlow(); },
+    },
+    "group": {
+      id: "group",
+      host: "draw",
+      iconId: "group",
+      title: "Group",
+      isDisabled: () => state.selectedIds.size < 2,
+      onClick: () => groupSelection(),
+    },
+    "ungroup": {
+      id: "ungroup",
+      host: "draw",
+      iconId: "ungroup",
+      title: "Ungroup",
+      isDisabled: () => !anySelectedIsUngroupable(),
+      onClick: () => ungroupSelection(),
+    },
+    "group-as-textish": {
+      id: "group-as-textish",
+      host: "draw",
+      iconId: "group-as-text",
+      title: "Group as Text",
+      iconFor: () => {
+        const kind = homogeneousTextishKind();
+        return kind === "latex" ? "group-as-latex" : "group-as-text";
+      },
+      titleFor: () => {
+        const kind = homogeneousTextishKind();
+        if (kind === "text") return "Group as Text";
+        if (kind === "latex") return "Group as LaTeX";
+        return "Group as Text/LaTeX (selection must be ≥2 text vectors or ≥2 LaTeX vectors)";
+      },
+      isDisabled: () => homogeneousTextishKind() === null,
+      onClick: () => mergeTextishSelection(),
     },
   };
 
   const toolsPanel = mountToolsPanel({
     state,
     actions,
+    getCtx: () => toolCtx,
     onToolChange: switchTool,
     onColorChange: (c) => {
       state.color = c;
@@ -374,6 +410,12 @@ window.addEventListener("DOMContentLoaded", () => {
   // Drive the latex-input visibility on every render tick — no separate
   // observer needed; this is cheap and idempotent.
   setInterval(() => latexInput.update(), 200);
+
+  // Cheap tick to keep the tools-panel action buttons in sync with selection
+  // changes (group/ungroup/group-as-textish enable/disable + dynamic
+  // tooltips). Selection-change call sites are many; one polling tick is
+  // simpler than wiring every mutator. Idempotent and bounded.
+  setInterval(() => toolsPanel.update(), 200);
 
   // The text tool's "edit" flow uses state.textEditing too. When the user
   // clicks elsewhere (committing the edited text) we need to restore the
@@ -635,6 +677,196 @@ window.addEventListener("DOMContentLoaded", () => {
     // perm=edit guest — real-time sync via the host as relay.
     peerConnections.sendToAll({ type: "op", op });
   };
+
+  // ---------- Group / Ungroup / Group-as-Text-or-LaTeX ----------
+
+  /** "text" if every selected vector is text; "latex" if every selected is
+   * latex; null otherwise (mixed, non-text, or <2 selected). */
+  function homogeneousTextishKind(): "text" | "latex" | null {
+    if (state.selectedIds.size < 2) return null;
+    let kind: "text" | "latex" | null = null;
+    for (const id of state.selectedIds) {
+      const v = state.store.vectors.get(id);
+      if (!v) return null;
+      if (v.kind !== "text" && v.kind !== "latex") return null;
+      if (kind === null) kind = v.kind;
+      else if (kind !== v.kind) return null;
+    }
+    return kind;
+  }
+
+  function anySelectedIsUngroupable(): boolean {
+    if (state.selectedIds.size === 0) return false;
+    for (const id of state.selectedIds) {
+      const v = state.store.vectors.get(id);
+      if (!v) continue;
+      if (v.kind === "group") return true;
+      if (v.kind === "rect" || v.kind === "polyline") return true;
+      if ((v.kind === "text" || v.kind === "latex") && v.text.includes("\n")) return true;
+    }
+    return false;
+  }
+
+  function groupSelection(): void {
+    if (state.selectedIds.size < 2) return;
+    const children: Vector[] = [];
+    for (const id of state.selectedIds) {
+      const v = state.store.vectors.get(id);
+      if (v) children.push(v);
+    }
+    if (children.length < 2) return;
+    const me = getMyId();
+    const group: GroupVector = {
+      id: newVectorId(),
+      kind: "group",
+      author: me,
+      lastEditor: me,
+      color: children[0]!.color,
+      thickness: 1,
+      createdAt: Date.now(),
+      children,
+    };
+    const ops: Op[] = children.map((c) => ({ kind: "delete" as const, vector: c }));
+    ops.push({ kind: "add", vector: group });
+    state.store.applyAndRecord({ kind: "batch", ops });
+    state.selectedIds = new Set([group.id]);
+    bottomBar.update();
+    toolsPanel.update();
+    invalidate();
+  }
+
+  function ungroupSelection(): void {
+    const ops: Op[] = [];
+    const newIds: string[] = [];
+    for (const id of state.selectedIds) {
+      const v = state.store.vectors.get(id);
+      if (!v) continue;
+      const replacement = decompose(v);
+      if (replacement === null) {
+        newIds.push(v.id);  // keep selection on non-ungroupable items
+        continue;
+      }
+      ops.push({ kind: "delete", vector: v });
+      for (const r of replacement) {
+        ops.push({ kind: "add", vector: r });
+        newIds.push(r.id);
+      }
+    }
+    if (ops.length === 0) return;
+    state.store.applyAndRecord({ kind: "batch", ops });
+    state.selectedIds = new Set(newIds);
+    bottomBar.update();
+    toolsPanel.update();
+    invalidate();
+  }
+
+  /** Return the ungrouped replacements for `v`, or null if `v` is not
+   * decomposable (line, circle, pencil, single-line text/latex). */
+  function decompose(v: Vector): Vector[] | null {
+    if (v.kind === "group") return v.children;
+    if (v.kind === "rect") return rectAsLines(v);
+    if (v.kind === "polyline") return polylineAsLines(v);
+    if ((v.kind === "text" || v.kind === "latex") && v.text.includes("\n")) {
+      return textishByLines(v);
+    }
+    return null;
+  }
+
+  function rectAsLines(r: Vector & { kind: "rect" }): Vector[] {
+    const cx = (r.a.x + r.b.x) / 2;
+    const cy = (r.a.y + r.b.y) / 2;
+    const corners = [
+      { x: r.a.x, y: r.a.y },
+      { x: r.b.x, y: r.a.y },
+      { x: r.b.x, y: r.b.y },
+      { x: r.a.x, y: r.b.y },
+    ];
+    const rot = r.rotation ?? 0;
+    const cos = Math.cos(rot), sin = Math.sin(rot);
+    const rotated = corners.map((p) => ({
+      x: cx + (p.x - cx) * cos - (p.y - cy) * sin,
+      y: cy + (p.x - cx) * sin + (p.y - cy) * cos,
+    }));
+    const me = getMyId();
+    const lines: Vector[] = [];
+    for (let i = 0; i < 4; i++) {
+      const a = rotated[i]!;
+      const b = rotated[(i + 1) % 4]!;
+      lines.push({
+        id: newVectorId(),
+        kind: "line",
+        author: r.author,
+        lastEditor: me,
+        color: r.color,
+        thickness: r.thickness,
+        createdAt: Date.now(),
+        a, b,
+      });
+    }
+    return lines;
+  }
+
+  function polylineAsLines(p: Vector & { kind: "polyline" }): Vector[] {
+    const me = getMyId();
+    const lines: Vector[] = [];
+    for (let i = 0; i < p.points.length - 1; i++) {
+      lines.push({
+        id: newVectorId(),
+        kind: "line",
+        author: p.author,
+        lastEditor: me,
+        color: p.color,
+        thickness: p.thickness,
+        createdAt: Date.now(),
+        a: p.points[i]!,
+        b: p.points[i + 1]!,
+      });
+    }
+    return lines;
+  }
+
+  function textishByLines(v: Vector & { kind: "text" | "latex" }): Vector[] {
+    const lines = v.text.split("\n");
+    const me = getMyId();
+    const lineHeight = v.fontSize * 1.5;
+    return lines.map((line, i) => ({
+      ...v,
+      id: newVectorId(),
+      createdAt: Date.now(),
+      lastEditor: me,
+      text: line,
+      pos: { x: v.pos.x, y: v.pos.y + i * lineHeight },
+    }));
+  }
+
+  function mergeTextishSelection(): void {
+    const kind = homogeneousTextishKind();
+    if (!kind) return;
+    const selected: Array<Vector & { kind: "text" | "latex" }> = [];
+    for (const id of state.selectedIds) {
+      const v = state.store.vectors.get(id);
+      if (v && (v.kind === "text" || v.kind === "latex")) {
+        selected.push(v as Vector & { kind: "text" | "latex" });
+      }
+    }
+    if (selected.length < 2) return;
+    const model = selected[0]!;
+    const me = getMyId();
+    const merged = {
+      ...model,
+      id: newVectorId(),
+      createdAt: Date.now(),
+      lastEditor: me,
+      text: selected.map((v) => v.text).join("\n"),
+    };
+    const ops: Op[] = selected.map((v) => ({ kind: "delete" as const, vector: v }));
+    ops.push({ kind: "add", vector: merged });
+    state.store.applyAndRecord({ kind: "batch", ops });
+    state.selectedIds = new Set([merged.id]);
+    bottomBar.update();
+    toolsPanel.update();
+    invalidate();
+  }
 
   // ---------- Anchors ----------
   async function createAnchorFlow(): Promise<void> {
@@ -1188,6 +1420,8 @@ function shapeCoords(v: Vector): string {
       return `(${r(v.pos.x)},${r(v.pos.y)}) "${v.text.slice(0, 20)}"`;
     case "latex":
       return `(${r(v.pos.x)},${r(v.pos.y)}) "${v.text.slice(0, 20)}"`;
+    case "group":
+      return `[${v.children.length} children]`;
   }
 }
 

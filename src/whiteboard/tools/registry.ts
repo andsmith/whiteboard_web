@@ -36,7 +36,13 @@ export const DRAW_TOOL_ORDER: ToolId[] = [
 /** Action buttons in the toolbar — they don't become the active tool.
  * Definitions are filled in by main.ts at mount time (since the click handler
  * needs closures over room state and the dialog). The registry only declares
- * what slots exist and their order. */
-export const ACTION_ORDER: ActionId[] = ["anchor-create"];
+ * what slots exist and their order. Actions are partitioned by their
+ * `host` (nav / draw) at render time. */
+export const ACTION_ORDER: ActionId[] = [
+  "anchor-create",
+  "group-as-textish",
+  "group",
+  "ungroup",
+];
 
 export type { ActionDef };
