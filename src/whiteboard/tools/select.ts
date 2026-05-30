@@ -65,10 +65,15 @@ function captureOriginals(ctx: ToolContext): void {
 }
 
 function commitTransformBatch(ctx: ToolContext): void {
+  const me = ctx.getMyId();
   const ops: Op[] = [];
   for (const [id, before] of originals) {
-    const after = ctx.state.store.vectors.get(id);
-    if (after && after !== before) ops.push({ kind: "replace", before, after });
+    const current = ctx.state.store.vectors.get(id);
+    if (current && current !== before) {
+      const after = { ...current, lastEditor: me };
+      ctx.state.store.vectors.set(after.id, after);
+      ops.push({ kind: "replace", before, after });
+    }
   }
   if (ops.length > 0) ctx.state.store.recordOnly({ kind: "batch", ops });
   originals.clear();

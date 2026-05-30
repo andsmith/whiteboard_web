@@ -1,4 +1,5 @@
 import type { RoomManagerState, Perm } from "../room-manager";
+import { userColor } from "../user-colors";
 
 export interface ParticipantsPanelHandle {
   update: () => void;
@@ -13,6 +14,10 @@ export function mountParticipantsPanel(opts: {
   onToggle: () => void;
   onPromote: (peerId: string) => void;
   onPermChange: (peerId: string, perm: Perm) => void;
+  /** Set/clear the canvas author-highlight as the user hovers a name. */
+  onHoverAuthor: (peerId: string | null) => void;
+  /** Click a name to select every vector that peer authored. */
+  onClickAuthor: (peerId: string) => void;
   onLeave: () => void;
 }): ParticipantsPanelHandle {
   const panel = document.getElementById("participants-panel") as HTMLElement | null;
@@ -64,6 +69,14 @@ export function mountParticipantsPanel(opts: {
         const name = document.createElement("span");
         name.className = "p-name";
         name.textContent = p.name;
+        // Per-user color bar on the left edge of the name so the hover-highlight
+        // mapping is discoverable at a glance.
+        name.style.borderLeft = `4px solid ${userColor(p.peerId)}`;
+        name.style.paddingLeft = "6px";
+        name.style.cursor = "pointer";
+        name.addEventListener("mouseenter", () => opts.onHoverAuthor(p.peerId));
+        name.addEventListener("mouseleave", () => opts.onHoverAuthor(null));
+        name.addEventListener("click", () => opts.onClickAuthor(p.peerId));
         li.appendChild(name);
 
         if (p.isYou) li.appendChild(tag("you", "you"));

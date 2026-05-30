@@ -44,6 +44,10 @@ window.addEventListener("DOMContentLoaded", () => {
   const myName = (): string => room.state.yourName ?? "(local)";
 
   const commitVector = (v: Vector): void => {
+    // Stamp lastEditor on every commit. For brand-new vectors this equals
+    // `author`; for edited text/latex vectors it tells later viewers who most
+    // recently touched the content.
+    v.lastEditor = getMyId();
     debugLog.log("draw", `${v.kind} by ${myName()} ${shapeCoords(v)} id=${shortId(v.id)}`);
     state.store.applyAndRecord({ kind: "add", vector: v });
     bottomBar.update();
@@ -267,6 +271,23 @@ window.addEventListener("DOMContentLoaded", () => {
         peerConnections.sendToAll({ type: "perm-update", peerId, perm });
       }
     },
+    onHoverAuthor: (peerId) => {
+      state.highlightedAuthorId = peerId;
+      invalidate();
+    },
+    onClickAuthor: (peerId) => {
+      // Populate selectedIds with every vector authored by this peer, then
+      // switch to the modify tool so the user can immediately act on them.
+      const ids = new Set<string>();
+      for (const v of state.store.vectors.values()) {
+        if (v.author === peerId) ids.add(v.id);
+      }
+      state.selectedIds = ids;
+      // Clear hover-highlight so the selection-blue dominates.
+      state.highlightedAuthorId = null;
+      switchTool("modify");
+      invalidate();
+    },
     onLeave: () => {
       room.leave();
       if (location.hash) history.replaceState(null, "", location.pathname + location.search);
@@ -454,13 +475,19 @@ window.addEventListener("DOMContentLoaded", () => {
         state.store.clearHistory();
         bottomBar.update();
         invalidate();
+        // Host relays the op to OTHER guests so they all converge. Skip the
+        // originating sender — they already applied locally and would have
+        // their undo clobbered by a self-echo.
+        if (room.isHost() && peerConnections) {
+          peerConnections.sendToAllExcept(from, { type: "op", op: msg.op });
+        }
         break;
       case "anchor-add":
         debugLog.log("recv", `anchor-add ← ${shortId(from)} "${msg.anchor.name}"`);
         state.anchors.set(msg.anchor.id, msg.anchor);
-        // Host relays to other guests so all peers converge.
+        // Host relays to other guests (not back to the sender).
         if (room.isHost() && peerConnections) {
-          peerConnections.sendToAll({ type: "anchor-add", anchor: msg.anchor });
+          peerConnections.sendToAllExcept(from, { type: "anchor-add", anchor: msg.anchor });
         }
         titleBar.update();
         anchorsPanel.update();
@@ -470,7 +497,7 @@ window.addEventListener("DOMContentLoaded", () => {
         debugLog.log("recv", `anchor-delete ← ${shortId(from)} ${shortId(msg.anchorId)}`);
         state.anchors.delete(msg.anchorId);
         if (room.isHost() && peerConnections) {
-          peerConnections.sendToAll({ type: "anchor-delete", anchorId: msg.anchorId });
+          peerConnections.sendToAllExcept(from, { type: "anchor-delete", anchorId: msg.anchorId });
         }
         titleBar.update();
         anchorsPanel.update();
@@ -577,14 +604,15 @@ window.addEventListener("DOMContentLoaded", () => {
   //   - view-only guest: accumulate into pendingOps and signal presence-dirty
   //                      to host; clear lastRejectedAt since the user has made
   //                      a new edit.
-  //   - edit guest: still local-only (editor-mode TODO).
+  //   - edit guest: send to host (only peer we have a channel to). The host
+  //                 re-broadcasts to other guests via sendToAllExcept.
   state.store.onLocalChange = (op) => {
     debugLog.log("modify", `local op: ${describeOpLocal(op)}`);
+    if (!peerConnections) {
+      debugLog.log("warn", `op DROPPED — peerConnections not ready yet`);
+      return;
+    }
     if (room.isHost()) {
-      if (!peerConnections) {
-        debugLog.log("warn", `host op DROPPED — peerConnections not ready yet`);
-        return;
-      }
       peerConnections.sendToAll({ type: "op", op });
       return;
     }
@@ -593,13 +621,14 @@ window.addEventListener("DOMContentLoaded", () => {
       state.pendingOps.push(op);
       state.lastRejectedAt = null;
       submitBar.update();
-      if (wasEmpty && peerConnections) {
+      if (wasEmpty) {
         debugLog.log("send", `presence-dirty → host: true`);
         peerConnections.sendToAll({ type: "presence-dirty", dirty: true });
       }
       return;
     }
-    debugLog.log("info", `edit guest — op NOT broadcast (editor mode not implemented)`);
+    // perm=edit guest — real-time sync via the host as relay.
+    peerConnections.sendToAll({ type: "op", op });
   };
 
   // ---------- Anchors ----------
@@ -1024,6 +1053,24 @@ window.addEventListener("DOMContentLoaded", () => {
     // Ignore when typing in input fields
     const t = e.target as HTMLElement | null;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+
+    // Ctrl/Cmd-Z = undo; Ctrl/Cmd-Y or Ctrl/Cmd-Shift-Z = redo.
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (ctrl && (e.key === "z" || e.key === "Z")) {
+      if (e.shiftKey) state.store.redo();
+      else state.store.undo();
+      bottomBar.update();
+      invalidate();
+      e.preventDefault();
+      return;
+    }
+    if (ctrl && (e.key === "y" || e.key === "Y")) {
+      state.store.redo();
+      bottomBar.update();
+      invalidate();
+      e.preventDefault();
+      return;
+    }
 
     if ((e.key === "Delete" || e.key === "Backspace") && state.selectedIds.size > 0) {
       const ops: Op[] = [];

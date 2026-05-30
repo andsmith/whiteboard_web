@@ -176,6 +176,24 @@ export class PeerConnections {
     }
   }
 
+  /** Like sendToAll but skips the channel for `exceptPeerId`. Used by the
+   * host to relay guest-originated ops to all OTHER guests without echoing
+   * back to the originator (which would otherwise clobber their undo via
+   * the clearHistory() in the receive-side op handler). */
+  sendToAllExcept(exceptPeerId: string, msg: DataMessage): void {
+    const data = JSON.stringify(msg);
+    for (const [peerId, ch] of this.channels.entries()) {
+      if (peerId === exceptPeerId) continue;
+      if (ch.readyState !== "open") continue;
+      try {
+        ch.send(data);
+        this.handlers.onLog?.(`→ ${short(peerId)} ${describeDataMessage(msg)} (relay)`);
+      } catch (err) {
+        this.handlers.onLog?.(`sendToAllExcept(${short(peerId)}) THREW: ${String(err)}`);
+      }
+    }
+  }
+
   hasOpenChannelTo(peerId: string): boolean {
     return this.channels.get(peerId)?.readyState === "open";
   }

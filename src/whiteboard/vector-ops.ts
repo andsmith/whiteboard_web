@@ -4,10 +4,12 @@ import type { Point } from "./view";
 
 /** Deep-copy a vector with a fresh id, fresh createdAt, and a new author.
  * Geometry is shared safely: we route through translateVector(0,0) which
- * already clones the point arrays. */
+ * already clones the point arrays. The duplicator is the new vector's
+ * author (so copying someone else's shape makes you its creator) AND its
+ * lastEditor. */
 export function duplicateVector(v: Vector, author: string): Vector {
   const cloned = translateVector(v, 0, 0);
-  return { ...cloned, id: newVectorId(), createdAt: Date.now(), author };
+  return { ...cloned, id: newVectorId(), createdAt: Date.now(), author, lastEditor: author };
 }
 
 export function translateVector(v: Vector, dx: number, dy: number): Vector {

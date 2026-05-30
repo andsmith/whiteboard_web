@@ -5,7 +5,12 @@ export type VectorKind = "pencil" | "line" | "rect" | "circle" | "polyline" | "t
 export interface BaseVector {
   id: string;
   kind: VectorKind;
-  author: string;        // peerId or "local"
+  /** peerId of the user that originally created (or duplicated) this vector.
+   * Never changes once set. */
+  author: string;
+  /** peerId of the most recent modifier. Equals `author` when never modified
+   * by anyone else. Stamped on every commit (add or replace.after). */
+  lastEditor?: string;
   color: string;
   thickness: number;     // pixels at zoom=1
   createdAt: number;

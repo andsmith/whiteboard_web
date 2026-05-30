@@ -158,8 +158,11 @@ function startScale(ctx: ToolContext, hit: Vector, screenPt: Point): void {
 
 function commitTransform(ctx: ToolContext): void {
   if (!targetId || !original) return;
-  const final = ctx.state.store.vectors.get(targetId);
-  if (final && final !== original) {
+  const current = ctx.state.store.vectors.get(targetId);
+  if (current && current !== original) {
+    // Stamp the current user as lastEditor on the committed shape.
+    const final = { ...current, lastEditor: ctx.getMyId() };
+    ctx.state.store.vectors.set(final.id, final);
     ctx.state.store.recordOnly({ kind: "replace", before: original, after: final });
   }
 }

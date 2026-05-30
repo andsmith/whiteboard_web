@@ -62,6 +62,9 @@ export interface AppState {
   hoverId: string | null;
   /** Anchor currently moused over (for the on-canvas name tooltip). */
   hoverAnchorId: string | null;
+  /** Participant whose name is currently moused over in the Participants
+   * panel. Renderer overrides the color of vectors authored by this peerId. */
+  highlightedAuthorId: string | null;
   /** Radial menu state, while the menu is open. */
   radialMenu: RadialMenuState | null;
   /** While the user is mid-drag with the modify tool, wheel-zoom keeps
@@ -111,6 +114,7 @@ export function createInitialState(): AppState {
     editingOriginal: null,
     hoverId: null,
     hoverAnchorId: null,
+    highlightedAuthorId: null,
     radialMenu: null,
     dragLockedTargetId: null,
     placingDuplicates: null,

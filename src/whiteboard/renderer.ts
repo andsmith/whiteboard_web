@@ -4,6 +4,7 @@ import type { Anchor } from "./anchors";
 import { applyOpsTo, opAffectedIds } from "./submissions";
 import { getRadialIconPositions } from "./tools/modify";
 import { getCachedLatex, renderLatex } from "./latex-render";
+import { userColor } from "./user-colors";
 
 export const ANCHOR_ICON_R = 14;     // hit-test radius in screen px
 const PENDING_ALPHA = 0.55;
@@ -91,6 +92,11 @@ export class CanvasRenderer {
       let override: string | undefined;
       if (isDragging || isSelected) override = DRAG_COLOR;
       else if (isCandidate || isHovered) override = HOVER_COLOR;
+      else if (this.state.highlightedAuthorId && v.author === this.state.highlightedAuthorId) {
+        // Participant-hover highlight in the user's color. Selection / hover
+        // already won above, so this only fires for the bulk of the canvas.
+        override = userColor(v.author);
+      }
 
       // If the host is previewing a submission AND this vector is among the
       // affected ones, render the *preview* version instead of the current one.
