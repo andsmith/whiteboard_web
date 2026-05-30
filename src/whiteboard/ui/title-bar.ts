@@ -1,6 +1,6 @@
 /** Bump on every release so it's visible in the title bar.
  * Used to verify which build the browser is actually serving. */
-export const APP_VERSION = "0.2.2";
+export const APP_VERSION = "0.2.3";
 
 export type TitleStatus = "Host" | "Guest - Editing" | "Guest - Viewing" | "Connecting" | "Disconnected";
 

@@ -272,7 +272,15 @@ export const modifyTool: Tool = {
     }
 
     const hit = findHit(ctx.state.store.vectors.values(), screenPt, ctx.state.view, getCanvasCtx());
-    if (!hit) return;
+    if (!hit) {
+      // Click on empty canvas clears the selection — same affordance the
+      // select tool's box-select gives by dragging an empty region.
+      if (ctx.state.selectedIds.size > 0) {
+        ctx.state.selectedIds.clear();
+        ctx.invalidate();
+      }
+      return;
+    }
 
     // Shift+left-click → radial menu (same as middle-click via onMiddleClick).
     if (e.shiftKey) {
