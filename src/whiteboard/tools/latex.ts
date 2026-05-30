@@ -26,6 +26,7 @@ export const latexTool: Tool = {
     // one at the new location.
     commitCurrent(ctx);
     const world = snap(ctx.state.view.pixelsToWorld(eventCanvasPoint(e)), ctx.state.snapToGrid);
+    const screenScale = ctx.state.constantTextScale;
     const v: LatexVector = {
       id: newVectorId(),
       kind: "latex",
@@ -35,7 +36,10 @@ export const latexTool: Tool = {
       createdAt: Date.now(),
       pos: world,
       text: "",
-      fontSize: ctx.state.fontSize / Math.max(0.0001, ctx.state.view.zoom),
+      fontSize: screenScale
+        ? ctx.state.fontSize
+        : ctx.state.fontSize / Math.max(0.0001, ctx.state.view.zoom),
+      screenScale,
     };
     ctx.state.latexEditing = v;
     ctx.state.editingOriginal = null;

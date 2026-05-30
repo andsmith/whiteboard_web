@@ -44,6 +44,10 @@ export interface AppState {
   fontSize: number;
   showGrid: boolean;
   snapToGrid: boolean;
+  /** When true, new text/latex vectors are created with screenScale=true so
+   * their on-screen size stays constant as the user zooms. When false
+   * (default), text scales with zoom the same as every other vector. */
+  constantTextScale: boolean;
   participantsExpanded: boolean;
   debugExpanded: boolean;
   anchorsExpanded: boolean;
@@ -104,6 +108,7 @@ export function createInitialState(): AppState {
     fontSize: 16,
     showGrid: true,
     snapToGrid: false,
+    constantTextScale: false,
     participantsExpanded: true,
     debugExpanded: false,
     anchorsExpanded: false,

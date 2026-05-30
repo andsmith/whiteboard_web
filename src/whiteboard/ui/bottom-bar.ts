@@ -13,6 +13,7 @@ export function mountBottomBar(opts: {
   trashMode: () => TrashMode;
   onShowGridToggle: () => void;
   onSnapGridToggle: () => void;
+  onTextScaleModeToggle: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onTrash: () => void;
@@ -40,6 +41,7 @@ export function mountBottomBar(opts: {
   document.getElementById("btn-load")?.addEventListener("click", opts.onLoad);
   document.getElementById("btn-snapgrid")?.addEventListener("click", opts.onSnapGridToggle);
   document.getElementById("btn-showgrid")?.addEventListener("click", opts.onShowGridToggle);
+  document.getElementById("btn-textscalemode")?.addEventListener("click", opts.onTextScaleModeToggle);
   // btn-thickness and btn-fontsize have their pointer handlers wired by mountDial().
 
   const update = () => {
@@ -57,6 +59,17 @@ export function mountBottomBar(opts: {
 
     document.getElementById("btn-snapgrid")?.classList.toggle("on", opts.state.snapToGrid);
     document.getElementById("btn-showgrid")?.classList.toggle("on", opts.state.showGrid);
+
+    // Text scaling mode toggle — icon + tooltip swap with the active mode.
+    const tsBtn = document.getElementById("btn-textscalemode") as HTMLButtonElement | null;
+    if (tsBtn) {
+      const constant = opts.state.constantTextScale;
+      tsBtn.classList.toggle("on", constant);
+      tsBtn.innerHTML = constant ? ICONS["textscale-const"]! : ICONS["textscale-zoom"]!;
+      tsBtn.title = constant
+        ? "Constant Text Scale — new text/LaTeX stays the same screen size at any zoom. Click to switch to 'Text Scales with Zoom'."
+        : "Text Scales with Zoom — new text/LaTeX gets bigger when you zoom in. Click to switch to 'Constant Text Scale'.";
+    }
 
     const label = document.getElementById("zoom-label");
     if (label) label.textContent = `Zoom: ${opts.state.view.zoom.toFixed(2)}`;

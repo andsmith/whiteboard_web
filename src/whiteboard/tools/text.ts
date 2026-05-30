@@ -20,9 +20,12 @@ export const textTool: Tool = {
     if (e.button !== 0) return;
     commitCurrent(ctx);
     const world = snap(ctx.state.view.pixelsToWorld(eventCanvasPoint(e)), ctx.state.snapToGrid);
-    // state.fontSize is "screen pixels at the current zoom level". The
-    // vector stores world-space size, so render = world * zoom yields the
-    // chosen screen size for as long as the user stays at this zoom.
+    // state.fontSize is "screen pixels at the current zoom level".
+    //   - World-scale (default): vector stores fontSize / zoom so render =
+    //     world * zoom yields the chosen screen size only at this zoom.
+    //   - Screen-scale (constantTextScale=on): vector stores fontSize as-is
+    //     and renders without multiplying by zoom, so it stays constant.
+    const screenScale = ctx.state.constantTextScale;
     const v: TextVector = {
       id: newVectorId(),
       kind: "text",
@@ -32,7 +35,10 @@ export const textTool: Tool = {
       createdAt: Date.now(),
       pos: world,
       text: "",
-      fontSize: ctx.state.fontSize / Math.max(0.0001, ctx.state.view.zoom),
+      fontSize: screenScale
+        ? ctx.state.fontSize
+        : ctx.state.fontSize / Math.max(0.0001, ctx.state.view.zoom),
+      screenScale,
     };
     ctx.state.textEditing = v;
     ctx.invalidate();

@@ -27,4 +27,10 @@ export const ICONS: Record<string, string> = {
 
   // "Lx" matches the text tool's "Ab" style so the two are visually paired.
   latex: `<svg viewBox="0 0 24 24" fill="currentColor"><text x="2" y="18" font-family="serif" font-size="16" font-weight="600" font-style="italic">L</text><text x="13" y="18" font-family="serif" font-size="13" font-weight="500" font-style="italic">x</text></svg>`,
+
+  // Text-scale-mode toggle: "A" with outward arrows (text grows with zoom).
+  "textscale-zoom": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><text x="6" y="17" font-family="serif" font-size="14" font-weight="700" fill="currentColor" stroke="none">A</text><path d="M16 4l4 0 0 4"/><path d="M16 4l4 4"/><path d="M8 20l-4 0 0-4"/><path d="M8 20l-4-4"/></svg>`,
+
+  // Text-scale-mode toggle: "A" inside a fixed frame (constant size).
+  "textscale-const": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><text x="6" y="18" font-family="serif" font-size="14" font-weight="700" fill="currentColor" stroke="none">A</text></svg>`,
 };

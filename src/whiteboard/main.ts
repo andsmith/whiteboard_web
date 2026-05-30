@@ -174,6 +174,10 @@ window.addEventListener("DOMContentLoaded", () => {
       state.snapToGrid = !state.snapToGrid;
       bottomBar.update();
     },
+    onTextScaleModeToggle: () => {
+      state.constantTextScale = !state.constantTextScale;
+      bottomBar.update();
+    },
     onUndo: () => {
       state.store.undo();
       bottomBar.update();
